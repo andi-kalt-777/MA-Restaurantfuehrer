@@ -23,7 +23,7 @@
 </head>
 <body>
   <div id="root"></div>
-
+ 
   <script>
     // ⚠️ HIER DEINE FIREBASE-KONFIGURATION EINFÜGEN
     // (siehe README.md für Anleitung)
@@ -40,29 +40,29 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
   </script>
-
+ 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
-
+ 
     const PASSWORD = "Polonia2025";
-
+ 
     function LoginScreen({ onLogin }) {
       const [pw, setPw] = useState("");
       const [name, setName] = useState("");
       const [step, setStep] = useState("pw"); // "pw" | "name"
       const [error, setError] = useState("");
-
+ 
       const checkPw = () => {
         if (pw === PASSWORD) { setError(""); setStep("name"); }
         else setError("Falsches Passwort. Bitte erneut versuchen.");
       };
-
+ 
       const doLogin = () => {
         if (!name.trim()) { setError("Bitte gib deinen Namen ein."); return; }
         localStorage.setItem("rmg_user", name.trim());
         onLogin(name.trim());
       };
-
+ 
       return (
         <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
           <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
@@ -71,7 +71,7 @@
               Restaurantführer der<br/>Montagabendgesellschaft
             </div>
             <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
-
+ 
             {step === "pw" ? (
               <>
                 <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}}
@@ -102,7 +102,7 @@
         </div>
       );
     }
-
+ 
     const CUISINES = [
       "Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch",
       "Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch",
@@ -111,7 +111,7 @@
     ];
     const PRICE_LABELS = ["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
     const EMPTY_FORM = { city:"", name:"", cuisine:"", service:5, food:5, price:3, stars:7 };
-
+ 
     const LIGHT = {
       bg:"#f7f3ee", card:"white", cardBorder:"#f0e8e0", cardShadow:"rgba(0,0,0,0.07)",
       headerBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)", headerSub:"#c4a882",
@@ -140,7 +140,7 @@
       thumb:"#0f0d0b", starEmpty:"#2a1e12", modal:"#1c1612", handle:"#2e2218", empty:"#3a2a1a",
       toast:"#d4a870", toastColor:"#0f0d0b",
     };
-
+ 
     function Slider({ label, value, min, max, onChange, color, display, t }) {
       const pct = ((value - min) / (max - min)) * 100;
       return (
@@ -162,7 +162,7 @@
         </div>
       );
     }
-
+ 
     function Stars({ value, t }) {
       return (
         <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
@@ -172,11 +172,11 @@
         </div>
       );
     }
-
+ 
     function Badge({ value, max=10, color }) {
       return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>{value}/{max}</span>;
     }
-
+ 
     function Card({ r, onClick, t }) {
       const avg = ((r.food+r.service)/2).toFixed(1);
       return (
@@ -209,7 +209,7 @@
         </div>
       );
     }
-
+ 
     function Modal({ r, onClose, onDelete, t }) {
       if (!r) return null;
       return (
@@ -238,7 +238,7 @@
         </div>
       );
     }
-
+ 
     function Toast({ msg, t }) {
       if (!msg) return null;
       return (
@@ -247,15 +247,13 @@
         </div>
       );
     }
-
+ 
     function App() {
       const [user, setUser] = useState(() => localStorage.getItem("rmg_user") || null);
       const [dark, setDark] = useState(false);
       const t = dark ? DARK : LIGHT;
       const [view, setView] = useState("list");
       const [form, setForm] = useState(EMPTY_FORM);
-
-      if (!user) return <LoginScreen onLogin={setUser} />;
       const [restaurants, setRestaurants] = useState([]);
       const [loading, setLoading] = useState(true);
       const [filter, setFilter] = useState({city:"",cuisine:""});
@@ -263,25 +261,35 @@
       const [errors, setErrors] = useState({});
       const [toast, setToast] = useState("");
       const [saving, setSaving] = useState(false);
-
+ 
       const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
-
+ 
       useEffect(()=>{
-        const ref = db.ref("restaurants");
-        ref.on("value", snap => {
-          const data = snap.val();
-          setRestaurants(data ? Object.values(data) : []);
+        if (!user) return;
+        let ref;
+        try {
+          ref = db.ref("restaurants");
+          ref.on("value", snap => {
+            const data = snap.val();
+            setRestaurants(data ? Object.values(data) : []);
+            setLoading(false);
+          }, () => setLoading(false));
+        } catch(e) {
           setLoading(false);
-        });
-        return () => ref.off();
-      }, []);
-
+        }
+        // Fallback: stop loading after 5s if Firebase doesn't respond
+        const timeout = setTimeout(() => setLoading(false), 5000);
+        return () => { ref && ref.off(); clearTimeout(timeout); };
+      }, [user]);
+ 
+      if (!user) return <LoginScreen onLogin={setUser} />;
+ 
       const cities = [...new Set(restaurants.map(r=>r.city))].sort();
       const cuisineList = [...new Set(restaurants.map(r=>r.cuisine))].sort();
       const filtered = restaurants.filter(r=>
         (!filter.city || r.city===filter.city) && (!filter.cuisine || r.cuisine===filter.cuisine)
       );
-
+ 
       const validate = () => {
         const e = {};
         if (!form.name.trim()) e.name="Bitte Name eingeben";
@@ -289,7 +297,7 @@
         if (!form.cuisine) e.cuisine="Bitte Küche auswählen";
         return e;
       };
-
+ 
       const handleAdd = async () => {
         const e = validate();
         if (Object.keys(e).length) { setErrors(e); return; }
@@ -304,7 +312,7 @@
         }
         setSaving(false);
       };
-
+ 
       const handleDelete = async id => {
         try {
           await db.ref("restaurants/"+id).remove();
@@ -314,19 +322,19 @@
           showToast("⚠️ Fehler beim Löschen");
         }
       };
-
+ 
       const f = (k,v) => setForm(p=>({...p,[k]:v}));
-
+ 
       if (loading) return (
         <div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
           <div style={{fontSize:48}}>🍽️</div>
           <div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade Restaurants…</div>
         </div>
       );
-
+ 
       return (
         <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:80,transition:"background 0.3s"}}>
-
+ 
           {/* Header */}
           <div style={{background:t.headerBg,padding:"24px 20px 20px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
@@ -345,7 +353,7 @@
             <span style={{fontSize:12,color:"#d4b890"}}>👤 Angemeldet als <strong>{user}</strong></span>
             <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}} style={{fontSize:11,color:"#c4a882",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
           </div>
-
+ 
           {/* List View */}
           {view==="list" && (
             <div style={{padding:"20px 16px"}}>
@@ -369,12 +377,12 @@
               ) : filtered.map(r=><Card key={r.id} r={r} onClick={()=>setSelected(r)} t={t} />)}
             </div>
           )}
-
+ 
           {/* Add View */}
           {view==="add" && (
             <div style={{padding:"20px 16px"}}>
               <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title,marginBottom:20}}>Restaurant hinzufügen</div>
-
+ 
               {[["name","Restaurant Name","z.B. Trattoria da Marco"],["city","Stadt","z.B. München"]].map(([key,lbl,ph])=>(
                 <div key={key} style={{marginBottom:16}}>
                   <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>{lbl}</label>
@@ -383,7 +391,7 @@
                   {errors[key] && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors[key]}</div>}
                 </div>
               ))}
-
+ 
               <div style={{marginBottom:20}}>
                 <label style={{display:"block",fontSize:12,color:t.label,marginBottom:8,fontFamily:"'Playfair Display',serif"}}>Art der Küche</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -394,21 +402,21 @@
                 </div>
                 {errors.cuisine && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisine}</div>}
               </div>
-
+ 
               <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
                 <Slider label="🍽️ Essen" value={form.food} min={0} max={10} onChange={v=>f("food",v)} color="#2e7d52" t={t} />
                 <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t} />
                 <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.accent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t} />
                 <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t} />
               </div>
-
+ 
               <button onClick={handleAdd} disabled={saving}
                 style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
                 {saving?"Wird gespeichert…":"Restaurant speichern"}
               </button>
             </div>
           )}
-
+ 
           {/* Bottom Nav */}
           <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
             {[["list","📋","Übersicht"],["add","➕","Hinzufügen"]].map(([v,icon,lbl])=>(
@@ -419,13 +427,13 @@
               </button>
             ))}
           </div>
-
+ 
           <Modal r={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} t={t} />
           <Toast msg={toast} t={t} />
         </div>
       );
     }
-
+ 
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<App />);
   </script>
