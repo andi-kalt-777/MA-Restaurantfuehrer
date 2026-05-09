@@ -107,10 +107,10 @@
       "Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch",
       "Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch",
       "Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch",
-      "Mediterran","Sushi","Vegetarisch/Vegan","Fusion","Andere"
+      "Polnisch","Sushi","Burger","Fusion","Andere"
     ];
     const PRICE_LABELS = ["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
-    const EMPTY_FORM = { city:"", name:"", cuisine:"", service:5, food:5, price:3, stars:7 };
+    const EMPTY_FORM = { city:"", name:"", cuisines:[], service:5, food:5, price:3, stars:7 };
  
     const LIGHT = {
       bg:"#f7f3ee", card:"white", cardBorder:"#f0e8e0", cardShadow:"rgba(0,0,0,0.07)",
@@ -179,6 +179,7 @@
  
     function Card({ r, onClick, t }) {
       const avg = ((r.food+r.service)/2).toFixed(1);
+      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
       return (
         <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
           onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
@@ -186,7 +187,7 @@
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
               <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
-              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {r.cuisine}</div>
+              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
             </div>
             <div style={{textAlign:"right"}}>
               <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.accent}}>{avg}</div>
@@ -210,14 +211,14 @@
       );
     }
  
-    function Modal({ r, onClose, onDelete, t }) {
+    function Modal({ r, onClose, onDelete, onEdit, t }) {
       if (!r) return null;
       return (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
           <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
             <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}} />
             <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
-            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {r.cuisine}</div>
+            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {(Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : [])).join(" & ")}</div>
             <div style={{marginTop:16}}><Stars value={r.stars} t={t} /></div>
             <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               {[["🍽️ Essen",r.food,"#2e7d52"],["🤝 Service",r.service,"#1a5f8c"]].map(([lbl,val,col])=>(
@@ -231,9 +232,14 @@
               <span style={{fontSize:12,color:t.sub}}>Preis: </span>
               <span style={{fontWeight:700,color:t.accent}}>{"€".repeat(r.price)} · {PRICE_LABELS[r.price]}</span>
             </div>
-            <button onClick={()=>onDelete(r.id)} style={{marginTop:16,width:"100%",padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
-              🗑️ Eintrag löschen
-            </button>
+            <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <button onClick={()=>onEdit(r)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>
+                ✏️ Bearbeiten
+              </button>
+              <button onClick={()=>onDelete(r.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
+                🗑️ Löschen
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -261,6 +267,7 @@
       const [errors, setErrors] = useState({});
       const [toast, setToast] = useState("");
       const [saving, setSaving] = useState(false);
+      const [editingId, setEditingId] = useState(null);
  
       const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
  
@@ -284,17 +291,47 @@
  
       if (!user) return <LoginScreen onLogin={setUser} />;
  
+      const handleEdit = (r) => {
+        setForm({
+          name: r.name,
+          city: r.city,
+          cuisines: Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []),
+          food: r.food,
+          service: r.service,
+          price: r.price,
+          stars: r.stars,
+        });
+        setEditingId(r.id);
+        setSelected(null);
+        setView("add");
+      };
+ 
+      const handleUpdate = async () => {
+        const e = validate();
+        if (Object.keys(e).length) { setErrors(e); return; }
+        setSaving(true);
+        try {
+          await db.ref("restaurants/"+editingId).update({...form, id: editingId});
+          setForm(EMPTY_FORM); setEditingId(null); setErrors({}); setView("list");
+          showToast("✅ Restaurant aktualisiert!");
+        } catch {
+          showToast("⚠️ Fehler beim Speichern");
+        }
+        setSaving(false);
+      };
+ 
       const cities = [...new Set(restaurants.map(r=>r.city))].sort();
-      const cuisineList = [...new Set(restaurants.map(r=>r.cuisine))].sort();
-      const filtered = restaurants.filter(r=>
-        (!filter.city || r.city===filter.city) && (!filter.cuisine || r.cuisine===filter.cuisine)
-      );
+      const cuisineList = [...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
+      const filtered = restaurants.filter(r=> {
+        const rc = Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+        return (!filter.city || r.city===filter.city) && (!filter.cuisine || rc.includes(filter.cuisine));
+      });
  
       const validate = () => {
         const e = {};
         if (!form.name.trim()) e.name="Bitte Name eingeben";
         if (!form.city.trim()) e.city="Bitte Stadt eingeben";
-        if (!form.cuisine) e.cuisine="Bitte Küche auswählen";
+        if (!form.cuisines.length) e.cuisines="Bitte mindestens eine Küche auswählen";
         return e;
       };
  
@@ -349,9 +386,9 @@
               {dark?"☀️":"🌙"}
             </button>
           </div>
-          <div style={{background:"rgba(0,0,0,0.2)",padding:"8px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:12,color:"#d4b890"}}>👤 Angemeldet als <strong>{user}</strong></span>
-            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}} style={{fontSize:11,color:"#c4a882",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+          <div style={{background:"rgba(0,0,0,0.25)",padding:"8px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 Angemeldet als <strong style={{color:"white"}}>{user}</strong></span>
+            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
           </div>
  
           {/* List View */}
@@ -378,29 +415,65 @@
             </div>
           )}
  
-          {/* Add View */}
+          {/* Add / Edit View */}
           {view==="add" && (
             <div style={{padding:"20px 16px"}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title,marginBottom:20}}>Restaurant hinzufügen</div>
- 
-              {[["name","Restaurant Name","z.B. Trattoria da Marco"],["city","Stadt","z.B. München"]].map(([key,lbl,ph])=>(
-                <div key={key} style={{marginBottom:16}}>
-                  <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>{lbl}</label>
-                  <input value={form[key]} onChange={e=>{f(key,e.target.value);setErrors(p=>({...p,[key]:""}))} } placeholder={ph}
-                    style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors[key]?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
-                  {errors[key] && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors[key]}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+                {editingId && <button onClick={()=>{setView("list");setForm(EMPTY_FORM);setEditingId(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>}
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>
+                  {editingId ? "Restaurant bearbeiten" : "Restaurant hinzufügen"}
                 </div>
-              ))}
+              </div>
+ 
+              <div style={{marginBottom:16}}>
+                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Restaurant Name</label>
+                <input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco"
+                  style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
+                {errors.name && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}
+              </div>
+ 
+              <div style={{marginBottom:16}}>
+                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label>
+                <input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München"
+                  list="city-suggestions"
+                  style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
+                <datalist id="city-suggestions">
+                  {cities.map(c=><option key={c} value={c} />)}
+                </datalist>
+                {errors.city && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.city}</div>}
+              </div>
  
               <div style={{marginBottom:20}}>
-                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:8,fontFamily:"'Playfair Display',serif"}}>Art der Küche</label>
+                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>
+                  Art der Küche
+                  <span style={{marginLeft:8,fontWeight:400,color:form.cuisines.length===3?"#e05030":t.tick}}>
+                    ({form.cuisines.length}/3 gewählt)
+                  </span>
+                </label>
+                <div style={{fontSize:11,color:t.tick,marginBottom:8}}>Bis zu 3 Küchen auswählbar</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {CUISINES.map(c=>(
-                    <button key={c} onClick={()=>{f("cuisine",c);setErrors(p=>({...p,cuisine:""}))}}
-                      style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:"pointer",border:`1.5px solid ${form.cuisine===c?t.chipOn:t.chipBorder}`,background:form.cuisine===c?t.chipOn:t.chipBg,color:form.cuisine===c?t.chipOnColor:t.chipColor,transition:"all 0.15s"}}>{c}</button>
-                  ))}
+                  {CUISINES.map(c=>{
+                    const selected = form.cuisines.includes(c);
+                    const disabled = !selected && form.cuisines.length >= 3;
+                    return (
+                      <button key={c} onClick={()=>{
+                        if(disabled) return;
+                        const next = selected
+                          ? form.cuisines.filter(x=>x!==c)
+                          : [...form.cuisines, c];
+                        f("cuisines", next);
+                        setErrors(p=>({...p,cuisines:""}));
+                      }}
+                        style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:disabled?"not-allowed":"pointer",
+                          border:`1.5px solid ${selected?t.chipOn:t.chipBorder}`,
+                          background:selected?t.chipOn:t.chipBg,
+                          color:selected?t.chipOnColor:disabled?"#ccc":t.chipColor,
+                          opacity:disabled?0.4:1,
+                          transition:"all 0.15s"}}>{c}</button>
+                    );
+                  })}
                 </div>
-                {errors.cuisine && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisine}</div>}
+                {errors.cuisines && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisines}</div>}
               </div>
  
               <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
@@ -410,9 +483,9 @@
                 <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t} />
               </div>
  
-              <button onClick={handleAdd} disabled={saving}
+              <button onClick={editingId ? handleUpdate : handleAdd} disabled={saving}
                 style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
-                {saving?"Wird gespeichert…":"Restaurant speichern"}
+                {saving ? "Wird gespeichert…" : editingId ? "Änderungen speichern" : "Restaurant speichern"}
               </button>
             </div>
           )}
@@ -428,7 +501,7 @@
             ))}
           </div>
  
-          <Modal r={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} t={t} />
+          <Modal r={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} t={t} />
           <Toast msg={toast} t={t} />
         </div>
       );
