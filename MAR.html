@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Restaurantführer der Montagabendgesellschaft</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f7f3ee; font-family: system-ui, sans-serif; }
+    input, select, button { font-family: inherit; }
+    input::placeholder { color: #b0a090; }
+    select option { background: white; color: #2c1f14; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #c0a880; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    // ⚠️ HIER DEINE FIREBASE-KONFIGURATION EINFÜGEN
+    // (siehe README.md für Anleitung)
+    const firebaseConfig = {
+  apiKey: "AIzaSyALr6jetmhTYj9XIGZQ7aBs_gxAFLnt4x4",
+  authDomain: "montagabendrestaurants.firebaseapp.com",
+  databaseURL: "https://montagabendrestaurants-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "montagabendrestaurants",
+  storageBucket: "montagabendrestaurants.firebasestorage.app",
+  messagingSenderId: "977029677061",
+  appId: "1:977029677061:web:d2b7b3d94820f710e1dc6c",
+  measurementId: "G-FG9LH4LK9H"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+  </script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const PASSWORD = "Polonia2025";
+
+    function LoginScreen({ onLogin }) {
+      const [pw, setPw] = useState("");
+      const [name, setName] = useState("");
+      const [step, setStep] = useState("pw"); // "pw" | "name"
+      const [error, setError] = useState("");
+
+      const checkPw = () => {
+        if (pw === PASSWORD) { setError(""); setStep("name"); }
+        else setError("Falsches Passwort. Bitte erneut versuchen.");
+      };
+
+      const doLogin = () => {
+        if (!name.trim()) { setError("Bitte gib deinen Namen ein."); return; }
+        localStorage.setItem("rmg_user", name.trim());
+        onLogin(name.trim());
+      };
+
+      return (
+        <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+            <div style={{fontSize:52,marginBottom:12}}>🍽️</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:20,color:"#2c1f14",lineHeight:1.3,marginBottom:6}}>
+              Restaurantführer der<br/>Montagabendgesellschaft
+            </div>
+            <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
+
+            {step === "pw" ? (
+              <>
+                <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}}
+                  onKeyDown={e=>e.key==="Enter"&&checkPw()}
+                  placeholder="Passwort eingeben"
+                  style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center",letterSpacing:2}} />
+                {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
+                <button onClick={checkPw}
+                  style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                  Weiter →
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:13,color:"#7a6650",marginBottom:12,fontFamily:"'Playfair Display',serif"}}>Wie heißt du?</div>
+                <input value={name} onChange={e=>{setName(e.target.value);setError("");}}
+                  onKeyDown={e=>e.key==="Enter"&&doLogin()}
+                  placeholder="Dein Name"
+                  style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center"}} />
+                {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
+                <button onClick={doLogin}
+                  style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                  Einloggen
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const CUISINES = [
+      "Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch",
+      "Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch",
+      "Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch",
+      "Mediterran","Sushi","Vegetarisch/Vegan","Fusion","Andere"
+    ];
+    const PRICE_LABELS = ["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
+    const EMPTY_FORM = { city:"", name:"", cuisine:"", service:5, food:5, price:3, stars:7 };
+
+    const LIGHT = {
+      bg:"#f7f3ee", card:"white", cardBorder:"#f0e8e0", cardShadow:"rgba(0,0,0,0.07)",
+      headerBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)", headerSub:"#c4a882",
+      title:"#2c1f14", sub:"#9a8878", label:"#7a6650", sliderTrack:"#e8e0d6",
+      tick:"#b0a090", inputBg:"white", inputBorder:"#e0d8cc", inputColor:"#2c1f14",
+      innerCard:"#faf8f5", navBg:"white", navBorder:"#f0e8e0", navShadow:"rgba(0,0,0,0.08)",
+      navActive:"#4a2e1a", navInactive:"#b0a090", accent:"#c4622c",
+      chipBg:"white", chipBorder:"#e0d8cc", chipColor:"#4a2e1a",
+      chipOn:"#4a2e1a", chipOnColor:"white",
+      filterOn:"#4a2e1a", filterOnColor:"white", filterBg:"white", filterColor:"#4a2e1a", filterBorder:"#e0d8cc",
+      btn:"linear-gradient(135deg,#2c1f14,#4a2e1a)", btnColor:"white",
+      thumb:"white", starEmpty:"#e0d8cc", modal:"white", handle:"#e0d8cc", empty:"#b0a090",
+      toast:"#2c1f14", toastColor:"white",
+    };
+    const DARK = {
+      bg:"#0f0d0b", card:"#1c1612", cardBorder:"#2e2218", cardShadow:"rgba(0,0,0,0.5)",
+      headerBg:"linear-gradient(135deg,#080604 0%,#161008 100%)", headerSub:"#8a6a44",
+      title:"#f0e8dc", sub:"#7a6858", label:"#9a8878", sliderTrack:"#2e2218",
+      tick:"#5a4838", inputBg:"#161210", inputBorder:"#2e2218", inputColor:"#f0e8dc",
+      innerCard:"#141210", navBg:"#0f0d0b", navBorder:"#2e2218", navShadow:"rgba(0,0,0,0.5)",
+      navActive:"#d4a870", navInactive:"#3a2a1a", accent:"#e07840",
+      chipBg:"#1c1612", chipBorder:"#2e2218", chipColor:"#b09070",
+      chipOn:"#d4a870", chipOnColor:"#0f0d0b",
+      filterOn:"#d4a870", filterOnColor:"#0f0d0b", filterBg:"#1c1612", filterColor:"#b09070", filterBorder:"#2e2218",
+      btn:"linear-gradient(135deg,#c49050,#e07840)", btnColor:"#0f0d0b",
+      thumb:"#0f0d0b", starEmpty:"#2a1e12", modal:"#1c1612", handle:"#2e2218", empty:"#3a2a1a",
+      toast:"#d4a870", toastColor:"#0f0d0b",
+    };
+
+    function Slider({ label, value, min, max, onChange, color, display, t }) {
+      const pct = ((value - min) / (max - min)) * 100;
+      return (
+        <div style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label}}>{label}</span>
+            <span style={{fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{display ?? value}</span>
+          </div>
+          <div style={{position:"relative",height:6,borderRadius:3,background:t.sliderTrack}}>
+            <div style={{position:"absolute",left:0,top:0,height:"100%",borderRadius:3,background:`linear-gradient(90deg,${color}88,${color})`,width:`${pct}%`,transition:"width 0.1s"}} />
+            <input type="range" min={min} max={max} value={value} onChange={e=>onChange(+e.target.value)}
+              style={{position:"absolute",top:-8,left:0,width:"100%",height:22,opacity:0,cursor:"pointer",zIndex:2,margin:0}} />
+            <div style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:`calc(${pct}% - 10px)`,width:20,height:20,borderRadius:"50%",background:color,boxShadow:`0 2px 8px ${color}55`,border:`3px solid ${t.thumb}`,transition:"left 0.1s",pointerEvents:"none"}} />
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+            <span style={{fontSize:10,color:t.tick}}>{min}</span>
+            <span style={{fontSize:10,color:t.tick}}>{max}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function Stars({ value, t }) {
+      return (
+        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+          {[...Array(10)].map((_,i)=>(
+            <span key={i} style={{fontSize:14,color:i<value?"#e8a020":t.starEmpty}}>★</span>
+          ))}
+        </div>
+      );
+    }
+
+    function Badge({ value, max=10, color }) {
+      return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>{value}/{max}</span>;
+    }
+
+    function Card({ r, onClick, t }) {
+      const avg = ((r.food+r.service)/2).toFixed(1);
+      return (
+        <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+          onMouseLeave={e=>e.currentTarget.style.transform=""}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
+              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {r.cuisine}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.accent}}>{avg}</div>
+              <div style={{fontSize:10,color:t.tick}}>Ø Wertung</div>
+            </div>
+          </div>
+          <div style={{marginTop:10}}><Stars value={r.stars} t={t} /></div>
+          <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <Badge value={r.food} color="#2e7d52" />
+            <span style={{fontSize:11,color:t.sub}}>Essen</span>
+            <Badge value={r.service} color="#1a5f8c" />
+            <span style={{fontSize:11,color:t.sub}}>Service</span>
+            <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(r.price)}</span>
+          </div>
+          {r.author && (
+            <div style={{textAlign:"right",marginTop:6}}>
+              <span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>von {r.author}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function Modal({ r, onClose, onDelete, t }) {
+      if (!r) return null;
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
+            <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}} />
+            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
+            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {r.cuisine}</div>
+            <div style={{marginTop:16}}><Stars value={r.stars} t={t} /></div>
+            <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {[["🍽️ Essen",r.food,"#2e7d52"],["🤝 Service",r.service,"#1a5f8c"]].map(([lbl,val,col])=>(
+                <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:14,textAlign:"center"}}>
+                  <div style={{fontSize:12,color:t.sub}}>{lbl}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:col}}>{val}/10</div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:14,textAlign:"center"}}>
+              <span style={{fontSize:12,color:t.sub}}>Preis: </span>
+              <span style={{fontWeight:700,color:t.accent}}>{"€".repeat(r.price)} · {PRICE_LABELS[r.price]}</span>
+            </div>
+            <button onClick={()=>onDelete(r.id)} style={{marginTop:16,width:"100%",padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
+              🗑️ Eintrag löschen
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function Toast({ msg, t }) {
+      if (!msg) return null;
+      return (
+        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:t.toast,color:t.toastColor,padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>
+          {msg}
+        </div>
+      );
+    }
+
+    function App() {
+      const [user, setUser] = useState(() => localStorage.getItem("rmg_user") || null);
+      const [dark, setDark] = useState(false);
+      const t = dark ? DARK : LIGHT;
+      const [view, setView] = useState("list");
+      const [form, setForm] = useState(EMPTY_FORM);
+
+      if (!user) return <LoginScreen onLogin={setUser} />;
+      const [restaurants, setRestaurants] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [filter, setFilter] = useState({city:"",cuisine:""});
+      const [selected, setSelected] = useState(null);
+      const [errors, setErrors] = useState({});
+      const [toast, setToast] = useState("");
+      const [saving, setSaving] = useState(false);
+
+      const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
+
+      useEffect(()=>{
+        const ref = db.ref("restaurants");
+        ref.on("value", snap => {
+          const data = snap.val();
+          setRestaurants(data ? Object.values(data) : []);
+          setLoading(false);
+        });
+        return () => ref.off();
+      }, []);
+
+      const cities = [...new Set(restaurants.map(r=>r.city))].sort();
+      const cuisineList = [...new Set(restaurants.map(r=>r.cuisine))].sort();
+      const filtered = restaurants.filter(r=>
+        (!filter.city || r.city===filter.city) && (!filter.cuisine || r.cuisine===filter.cuisine)
+      );
+
+      const validate = () => {
+        const e = {};
+        if (!form.name.trim()) e.name="Bitte Name eingeben";
+        if (!form.city.trim()) e.city="Bitte Stadt eingeben";
+        if (!form.cuisine) e.cuisine="Bitte Küche auswählen";
+        return e;
+      };
+
+      const handleAdd = async () => {
+        const e = validate();
+        if (Object.keys(e).length) { setErrors(e); return; }
+        setSaving(true);
+        try {
+          const id = Date.now().toString();
+          await db.ref("restaurants/"+id).set({...form, id, author: user});
+          setForm(EMPTY_FORM); setErrors({}); setView("list");
+          showToast("✅ Restaurant gespeichert!");
+        } catch {
+          showToast("⚠️ Fehler beim Speichern");
+        }
+        setSaving(false);
+      };
+
+      const handleDelete = async id => {
+        try {
+          await db.ref("restaurants/"+id).remove();
+          setSelected(null);
+          showToast("🗑️ Eintrag gelöscht");
+        } catch {
+          showToast("⚠️ Fehler beim Löschen");
+        }
+      };
+
+      const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
+      if (loading) return (
+        <div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:48}}>🍽️</div>
+          <div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade Restaurants…</div>
+        </div>
+      );
+
+      return (
+        <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:80,transition:"background 0.3s"}}>
+
+          {/* Header */}
+          <div style={{background:t.headerBg,padding:"24px 20px 20px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,lineHeight:1.3}}>
+                🍽️ Restaurantführer der<br/>Montagabendgesellschaft
+              </div>
+              <div style={{fontSize:12,color:t.headerSub,marginTop:6}}>
+                {restaurants.length} Restaurant{restaurants.length!==1?"s":""} bewertet
+              </div>
+            </div>
+            <button onClick={()=>setDark(d=>!d)} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontSize:16,marginTop:2,flexShrink:0}}>
+              {dark?"☀️":"🌙"}
+            </button>
+          </div>
+          <div style={{background:"rgba(0,0,0,0.2)",padding:"8px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:12,color:"#d4b890"}}>👤 Angemeldet als <strong>{user}</strong></span>
+            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}} style={{fontSize:11,color:"#c4a882",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+          </div>
+
+          {/* List View */}
+          {view==="list" && (
+            <div style={{padding:"20px 16px"}}>
+              {(cities.length>0||cuisineList.length>0) && (
+                <div style={{display:"flex",gap:10,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
+                  {[["city","Alle Städte",cities],["cuisine","Alle Küchen",cuisineList]].map(([key,placeholder,opts])=>(
+                    <select key={key} value={filter[key]} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
+                      style={{padding:"7px 12px",borderRadius:20,border:`1px solid ${filter[key]?t.filterOn:t.filterBorder}`,background:filter[key]?t.filterOn:t.filterBg,color:filter[key]?t.filterOnColor:t.filterColor,fontSize:13,cursor:"pointer",outline:"none",flexShrink:0}}>
+                      <option value="">{placeholder}</option>
+                      {opts.map(o=><option key={o}>{o}</option>)}
+                    </select>
+                  ))}
+                </div>
+              )}
+              {filtered.length===0 ? (
+                <div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}>
+                  <div style={{fontSize:48}}>🍽️</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>Noch keine Restaurants</div>
+                  <div style={{fontSize:13,marginTop:8}}>Füge dein erstes Restaurant hinzu!</div>
+                </div>
+              ) : filtered.map(r=><Card key={r.id} r={r} onClick={()=>setSelected(r)} t={t} />)}
+            </div>
+          )}
+
+          {/* Add View */}
+          {view==="add" && (
+            <div style={{padding:"20px 16px"}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title,marginBottom:20}}>Restaurant hinzufügen</div>
+
+              {[["name","Restaurant Name","z.B. Trattoria da Marco"],["city","Stadt","z.B. München"]].map(([key,lbl,ph])=>(
+                <div key={key} style={{marginBottom:16}}>
+                  <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>{lbl}</label>
+                  <input value={form[key]} onChange={e=>{f(key,e.target.value);setErrors(p=>({...p,[key]:""}))} } placeholder={ph}
+                    style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors[key]?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
+                  {errors[key] && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors[key]}</div>}
+                </div>
+              ))}
+
+              <div style={{marginBottom:20}}>
+                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:8,fontFamily:"'Playfair Display',serif"}}>Art der Küche</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {CUISINES.map(c=>(
+                    <button key={c} onClick={()=>{f("cuisine",c);setErrors(p=>({...p,cuisine:""}))}}
+                      style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:"pointer",border:`1.5px solid ${form.cuisine===c?t.chipOn:t.chipBorder}`,background:form.cuisine===c?t.chipOn:t.chipBg,color:form.cuisine===c?t.chipOnColor:t.chipColor,transition:"all 0.15s"}}>{c}</button>
+                  ))}
+                </div>
+                {errors.cuisine && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisine}</div>}
+              </div>
+
+              <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+                <Slider label="🍽️ Essen" value={form.food} min={0} max={10} onChange={v=>f("food",v)} color="#2e7d52" t={t} />
+                <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t} />
+                <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.accent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t} />
+                <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t} />
+              </div>
+
+              <button onClick={handleAdd} disabled={saving}
+                style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
+                {saving?"Wird gespeichert…":"Restaurant speichern"}
+              </button>
+            </div>
+          )}
+
+          {/* Bottom Nav */}
+          <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
+            {[["list","📋","Übersicht"],["add","➕","Hinzufügen"]].map(([v,icon,lbl])=>(
+              <button key={v} onClick={()=>setView(v)} style={{flex:1,padding:"14px 0 18px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <span style={{fontSize:22}}>{icon}</span>
+                <span style={{fontSize:11,color:view===v?t.navActive:t.navInactive,fontWeight:view===v?700:400}}>{lbl}</span>
+                {view===v && <div style={{width:20,height:2,background:t.navActive,borderRadius:1}} />}
+              </button>
+            ))}
+          </div>
+
+          <Modal r={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} t={t} />
+          <Toast msg={toast} t={t} />
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
