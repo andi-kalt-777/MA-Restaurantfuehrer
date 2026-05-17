@@ -23,10 +23,9 @@
 </head>
 <body>
   <div id="root"></div>
- 
+
   <script>
     // ⚠️ HIER DEINE FIREBASE-KONFIGURATION EINFÜGEN
-    // (siehe README.md für Anleitung)
     const firebaseConfig = {
   apiKey: "AIzaSyALr6jetmhTYj9XIGZQ7aBs_gxAFLnt4x4",
   authDomain: "montagabendrestaurants.firebaseapp.com",
@@ -40,29 +39,62 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
   </script>
- 
+
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
- 
+    const { useState, useEffect } = React;
+
     const PASSWORD = "Polonia2025";
- 
+
+    // ── Hilfsfunktionen für das neue Datenmodell ──────────────────────────────
+
+    // Alte Einträge (ohne ratings-Objekt) in neues Format umwandeln
+    function normalizeRestaurant(r) {
+      if (r.ratings) return r;
+      return {
+        ...r,
+        ratings: r.author ? {
+          [r.author]: {
+            food:    r.food    ?? 5,
+            service: r.service ?? 5,
+            price:   r.price   ?? 3,
+            stars:   r.stars   ?? 7,
+          }
+        } : {}
+      };
+    }
+
+    // Durchschnittswerte aller Bewertungen berechnen
+    function getAvgRating(r) {
+      const norm = normalizeRestaurant(r);
+      const vals = Object.values(norm.ratings || {});
+      if (!vals.length) return { food:0, service:0, price:0, stars:0, avg:0, count:0 };
+      const n = vals.length;
+      const food    = +(vals.reduce((s,x) => s + x.food,    0) / n).toFixed(1);
+      const service = +(vals.reduce((s,x) => s + x.service, 0) / n).toFixed(1);
+      const price   = Math.round(vals.reduce((s,x) => s + x.price, 0) / n);
+      const stars   = +(vals.reduce((s,x) => s + x.stars,   0) / n).toFixed(1);
+      const avg     = +((food + service) / 2).toFixed(1);
+      return { food, service, price, stars, avg, count: n };
+    }
+
+    // ── Login ─────────────────────────────────────────────────────────────────
+
     function LoginScreen({ onLogin }) {
-      const [pw, setPw] = useState("");
+      const [pw, setPw]     = useState("");
       const [name, setName] = useState("");
-      const [step, setStep] = useState("pw"); // "pw" | "name"
+      const [step, setStep] = useState("pw");
       const [error, setError] = useState("");
- 
+
       const checkPw = () => {
         if (pw === PASSWORD) { setError(""); setStep("name"); }
         else setError("Falsches Passwort. Bitte erneut versuchen.");
       };
- 
       const doLogin = () => {
         if (!name.trim()) { setError("Bitte gib deinen Namen ein."); return; }
         localStorage.setItem("rmg_user", name.trim());
         onLogin(name.trim());
       };
- 
+
       return (
         <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
           <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
@@ -71,16 +103,14 @@
               Restaurantführer der<br/>Montagabendgesellschaft
             </div>
             <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
- 
+
             {step === "pw" ? (
               <>
                 <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}}
-                  onKeyDown={e=>e.key==="Enter"&&checkPw()}
-                  placeholder="Passwort eingeben"
+                  onKeyDown={e=>e.key==="Enter"&&checkPw()} placeholder="Passwort eingeben"
                   style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center",letterSpacing:2}} />
                 {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-                <button onClick={checkPw}
-                  style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                <button onClick={checkPw} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
                   Weiter →
                 </button>
               </>
@@ -88,12 +118,10 @@
               <>
                 <div style={{fontSize:13,color:"#7a6650",marginBottom:12,fontFamily:"'Playfair Display',serif"}}>Wie heißt du?</div>
                 <input value={name} onChange={e=>{setName(e.target.value);setError("");}}
-                  onKeyDown={e=>e.key==="Enter"&&doLogin()}
-                  placeholder="Dein Name"
+                  onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="Dein Name"
                   style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center"}} />
                 {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-                <button onClick={doLogin}
-                  style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                <button onClick={doLogin} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
                   Einloggen
                 </button>
               </>
@@ -102,16 +130,21 @@
         </div>
       );
     }
- 
+
+    // ── Konstanten ────────────────────────────────────────────────────────────
+
     const CUISINES = [
       "Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch",
       "Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch",
       "Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch",
-      "Polnisch","Sushi","Burger","Fusion","Andere"
+      "Polnisch","Sushi","Burger","Fusion","Eisdiele","Andere"
     ];
     const PRICE_LABELS = ["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
-    const EMPTY_FORM = { city:"", name:"", cuisines:[], service:5, food:5, price:3, stars:7 };
- 
+    const EMPTY_FORM   = { city:"", name:"", cuisines:[], service:5, food:5, price:3, stars:7 };
+    const EMPTY_RATING = { service:5, food:5, price:3, stars:7 };
+
+    // ── Themes ────────────────────────────────────────────────────────────────
+
     const LIGHT = {
       bg:"#f7f3ee", card:"white", cardBorder:"#f0e8e0", cardShadow:"rgba(0,0,0,0.07)",
       headerBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)", headerSub:"#c4a882",
@@ -124,7 +157,8 @@
       filterOn:"#4a2e1a", filterOnColor:"white", filterBg:"white", filterColor:"#4a2e1a", filterBorder:"#e0d8cc",
       btn:"linear-gradient(135deg,#2c1f14,#4a2e1a)", btnColor:"white",
       thumb:"white", starEmpty:"#e0d8cc", modal:"white", handle:"#e0d8cc", empty:"#b0a090",
-      toast:"#2c1f14", toastColor:"white",
+      toast:"#2c1f14", toastColor:"white", ratingRow:"#f7f3ee", ratingBorder:"#f0e8e0",
+      secondaryBtn:"#f0e8e0", secondaryBtnColor:"#2c1f14",
     };
     const DARK = {
       bg:"#0f0d0b", card:"#1c1612", cardBorder:"#2e2218", cardShadow:"rgba(0,0,0,0.5)",
@@ -138,9 +172,12 @@
       filterOn:"#d4a870", filterOnColor:"#0f0d0b", filterBg:"#1c1612", filterColor:"#b09070", filterBorder:"#2e2218",
       btn:"linear-gradient(135deg,#c49050,#e07840)", btnColor:"#0f0d0b",
       thumb:"#0f0d0b", starEmpty:"#2a1e12", modal:"#1c1612", handle:"#2e2218", empty:"#3a2a1a",
-      toast:"#d4a870", toastColor:"#0f0d0b",
+      toast:"#d4a870", toastColor:"#0f0d0b", ratingRow:"#141210", ratingBorder:"#2e2218",
+      secondaryBtn:"#2e2218", secondaryBtnColor:"#d4a870",
     };
- 
+
+    // ── Shared UI-Komponenten ─────────────────────────────────────────────────
+
     function Slider({ label, value, min, max, onChange, color, display, t }) {
       const pct = ((value - min) / (max - min)) * 100;
       return (
@@ -162,89 +199,27 @@
         </div>
       );
     }
- 
+
     function Stars({ value, t }) {
+      const rounded = Math.round(value);
       return (
         <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
           {[...Array(10)].map((_,i)=>(
-            <span key={i} style={{fontSize:14,color:i<value?"#e8a020":t.starEmpty}}>★</span>
+            <span key={i} style={{fontSize:14,color:i<rounded?"#e8a020":t.starEmpty}}>★</span>
           ))}
         </div>
       );
     }
- 
+
     function Badge({ value, max=10, color }) {
-      return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>{value}/{max}</span>;
-    }
- 
-    function Card({ r, onClick, t }) {
-      const avg = ((r.food+r.service)/2).toFixed(1);
-      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
+      const display = typeof value === "number" && !Number.isInteger(value) ? value.toFixed(1) : value;
       return (
-        <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
-          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
-          onMouseLeave={e=>e.currentTarget.style.transform=""}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
-              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.accent}}>{avg}</div>
-              <div style={{fontSize:10,color:t.tick}}>Ø Wertung</div>
-            </div>
-          </div>
-          <div style={{marginTop:10}}><Stars value={r.stars} t={t} /></div>
-          <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <Badge value={r.food} color="#2e7d52" />
-            <span style={{fontSize:11,color:t.sub}}>Essen</span>
-            <Badge value={r.service} color="#1a5f8c" />
-            <span style={{fontSize:11,color:t.sub}}>Service</span>
-            <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(r.price)}</span>
-          </div>
-          {r.author && (
-            <div style={{textAlign:"right",marginTop:6}}>
-              <span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>von {r.author}</span>
-            </div>
-          )}
-        </div>
+        <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>
+          {display}/{max}
+        </span>
       );
     }
- 
-    function Modal({ r, onClose, onDelete, onEdit, t }) {
-      if (!r) return null;
-      return (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-          <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
-            <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}} />
-            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
-            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {(Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : [])).join(" & ")}</div>
-            <div style={{marginTop:16}}><Stars value={r.stars} t={t} /></div>
-            <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              {[["🍽️ Essen",r.food,"#2e7d52"],["🤝 Service",r.service,"#1a5f8c"]].map(([lbl,val,col])=>(
-                <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:14,textAlign:"center"}}>
-                  <div style={{fontSize:12,color:t.sub}}>{lbl}</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:col}}>{val}/10</div>
-                </div>
-              ))}
-            </div>
-            <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:14,textAlign:"center"}}>
-              <span style={{fontSize:12,color:t.sub}}>Preis: </span>
-              <span style={{fontWeight:700,color:t.accent}}>{"€".repeat(r.price)} · {PRICE_LABELS[r.price]}</span>
-            </div>
-            <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <button onClick={()=>onEdit(r)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>
-                ✏️ Bearbeiten
-              </button>
-              <button onClick={()=>onDelete(r.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
-                🗑️ Löschen
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
- 
+
     function Toast({ msg, t }) {
       if (!msg) return null;
       return (
@@ -253,24 +228,160 @@
         </div>
       );
     }
- 
+
+    // ── Card ──────────────────────────────────────────────────────────────────
+
+    function Card({ r, onClick, t }) {
+      const avg = getAvgRating(r);
+      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
+      return (
+        <div onClick={onClick}
+          style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+          onMouseLeave={e=>e.currentTarget.style.transform=""}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div style={{flex:1,minWidth:0,paddingRight:8}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
+              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.accent}}>{avg.avg}</div>
+              <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Bewertung{avg.count!==1?"en":""}</div>
+            </div>
+          </div>
+          <div style={{marginTop:10}}><Stars value={avg.stars} t={t} /></div>
+          <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <Badge value={avg.food} color="#2e7d52" />
+            <span style={{fontSize:11,color:t.sub}}>Essen</span>
+            <Badge value={avg.service} color="#1a5f8c" />
+            <span style={{fontSize:11,color:t.sub}}>Service</span>
+            <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(avg.price)}</span>
+          </div>
+          {r.author && (
+            <div style={{textAlign:"right",marginTop:6}}>
+              <span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>eingetragen von {r.author}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Modal ─────────────────────────────────────────────────────────────────
+
+    function Modal({ r, user, onClose, onDelete, onEdit, onRate, t }) {
+      if (!r) return null;
+      const norm     = normalizeRestaurant(r);
+      const avg      = getAvgRating(r);
+      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
+      const ratings  = Object.entries(norm.ratings || {});
+      const isAuthor = user === r.author;
+      const hasRated = !!norm.ratings?.[user];
+
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
+
+            {/* Handle */}
+            <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}} />
+
+            {/* Titel */}
+            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
+            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+
+            {/* Ø Sterne */}
+            <div style={{marginTop:14}}><Stars value={avg.stars} t={t} /></div>
+
+            {/* Ø Scores */}
+            <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {[["🍽️ Essen",avg.food,"#2e7d52"],["🤝 Service",avg.service,"#1a5f8c"]].map(([lbl,val,col])=>(
+                <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+                  <div style={{fontSize:11,color:t.sub}}>{lbl}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:col}}>{val}/10</div>
+                  <div style={{fontSize:10,color:t.tick}}>Durchschnitt</div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:10,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+              <span style={{fontSize:12,color:t.sub}}>Preis: </span>
+              <span style={{fontWeight:700,color:t.accent}}>{"€".repeat(avg.price)} · {PRICE_LABELS[avg.price]}</span>
+            </div>
+
+            {/* Alle Einzelbewertungen */}
+            <div style={{marginTop:20}}>
+              <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>
+                Alle Bewertungen ({avg.count})
+              </div>
+              {ratings.map(([author, rating]) => (
+                <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span>
+                    <span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span>
+                  </div>
+                  <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}>
+                    <span>🍽️ {rating.food}/10</span>
+                    <span>🤝 {rating.service}/10</span>
+                    <span>{"€".repeat(rating.price)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Aktions-Buttons */}
+            {isAuthor && (
+              <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <button onClick={()=>onEdit(r)}
+                  style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>
+                  ✏️ Bearbeiten
+                </button>
+                <button onClick={()=>onDelete(r.id)}
+                  style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
+                  🗑️ Löschen
+                </button>
+              </div>
+            )}
+
+            {!isAuthor && !hasRated && (
+              <button onClick={()=>onRate(r)}
+                style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.btn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                ⭐ Eigene Wertung abgeben
+              </button>
+            )}
+
+            {!isAuthor && hasRated && (
+              <button onClick={()=>onRate(r)}
+                style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
+                ✏️ Meine Wertung bearbeiten
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── App ───────────────────────────────────────────────────────────────────
+
     function App() {
-      const [user, setUser] = useState(() => localStorage.getItem("rmg_user") || null);
-      const [dark, setDark] = useState(false);
+      const [user, setUser]               = useState(() => localStorage.getItem("rmg_user") || null);
+      const [dark, setDark]               = useState(false);
       const t = dark ? DARK : LIGHT;
-      const [view, setView] = useState("list");
-      const [form, setForm] = useState(EMPTY_FORM);
+
+      const [view, setView]               = useState("list"); // "list" | "add" | "rate"
+      const [form, setForm]               = useState(EMPTY_FORM);
+      const [ratingForm, setRatingForm]   = useState(EMPTY_RATING);
+      const [ratingTarget, setRatingTarget] = useState(null);
+
       const [restaurants, setRestaurants] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [filter, setFilter] = useState({city:"",cuisine:""});
-      const [selected, setSelected] = useState(null);
-      const [errors, setErrors] = useState({});
-      const [toast, setToast] = useState("");
-      const [saving, setSaving] = useState(false);
-      const [editingId, setEditingId] = useState(null);
- 
+      const [loading, setLoading]         = useState(true);
+      const [filter, setFilter]           = useState({ city:"", cuisine:"", author:"", search:"" });
+      const [selected, setSelected]       = useState(null);
+      const [errors, setErrors]           = useState({});
+      const [toast, setToast]             = useState("");
+      const [saving, setSaving]           = useState(false);
+      const [editingId, setEditingId]     = useState(null);
+
       const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
- 
+
       useEffect(()=>{
         if (!user) return;
         let ref;
@@ -280,98 +391,139 @@
             const data = snap.val();
             setRestaurants(data ? Object.values(data) : []);
             setLoading(false);
-          }, () => setLoading(false));
-        } catch(e) {
-          setLoading(false);
-        }
-        // Fallback: stop loading after 5s if Firebase doesn't respond
-        const timeout = setTimeout(() => setLoading(false), 5000);
-        return () => { ref && ref.off(); clearTimeout(timeout); };
+          }, ()=>setLoading(false));
+        } catch { setLoading(false); }
+        const timeout = setTimeout(()=>setLoading(false), 5000);
+        return ()=>{ ref && ref.off(); clearTimeout(timeout); };
       }, [user]);
- 
+
       if (!user) return <LoginScreen onLogin={setUser} />;
- 
-      const handleEdit = (r) => {
-        setForm({
-          name: r.name,
-          city: r.city,
-          cuisines: Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []),
-          food: r.food,
-          service: r.service,
-          price: r.price,
-          stars: r.stars,
-        });
-        setEditingId(r.id);
-        setSelected(null);
-        setView("add");
-      };
- 
-      const handleUpdate = async () => {
-        const e = validate();
-        if (Object.keys(e).length) { setErrors(e); return; }
-        setSaving(true);
-        try {
-          await db.ref("restaurants/"+editingId).update({...form, id: editingId});
-          setForm(EMPTY_FORM); setEditingId(null); setErrors({}); setView("list");
-          showToast("✅ Restaurant aktualisiert!");
-        } catch {
-          showToast("⚠️ Fehler beim Speichern");
-        }
-        setSaving(false);
-      };
- 
-      const cities = [...new Set(restaurants.map(r=>r.city))].sort();
+
+      // ── Abgeleitete Listen ──────────────────────────────────────────────────
+
+      const cities      = [...new Set(restaurants.map(r=>r.city))].sort();
       const cuisineList = [...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
-      const filtered = restaurants.filter(r=> {
-        const rc = Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
-        return (!filter.city || r.city===filter.city) && (!filter.cuisine || rc.includes(filter.cuisine));
-      });
- 
+      const allRaters   = [...new Set(restaurants.flatMap(r=>{
+        const norm = normalizeRestaurant(r);
+        return Object.keys(norm.ratings || {});
+      }))].sort();
+
+      const filtered = restaurants
+        .filter(r => {
+          const norm = normalizeRestaurant(r);
+          const rc   = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
+          const matchCity    = !filter.city    || r.city === filter.city;
+          const matchCuisine = !filter.cuisine || rc.includes(filter.cuisine);
+          const matchAuthor  = !filter.author  || Object.keys(norm.ratings||{}).includes(filter.author);
+          const matchSearch  = !filter.search  || r.name.toLowerCase().includes(filter.search.toLowerCase());
+          return matchCity && matchCuisine && matchAuthor && matchSearch;
+        })
+        .sort((a,b) => getAvgRating(b).avg - getAvgRating(a).avg);
+
+      // ── Handlers ───────────────────────────────────────────────────────────
+
       const validate = () => {
         const e = {};
-        if (!form.name.trim()) e.name="Bitte Name eingeben";
-        if (!form.city.trim()) e.city="Bitte Stadt eingeben";
-        if (!form.cuisines.length) e.cuisines="Bitte mindestens eine Küche auswählen";
+        if (!form.name.trim())    e.name    = "Bitte Name eingeben";
+        if (!form.city.trim())    e.city    = "Bitte Stadt eingeben";
+        if (!form.cuisines.length) e.cuisines = "Bitte mindestens eine Küche auswählen";
         return e;
       };
- 
+
       const handleAdd = async () => {
         const e = validate();
         if (Object.keys(e).length) { setErrors(e); return; }
         setSaving(true);
         try {
           const id = Date.now().toString();
-          await db.ref("restaurants/"+id).set({...form, id, author: user});
+          await db.ref("restaurants/"+id).set({
+            id, name:form.name, city:form.city, cuisines:form.cuisines, author:user,
+            ratings: {
+              [user]: { food:form.food, service:form.service, price:form.price, stars:form.stars }
+            }
+          });
           setForm(EMPTY_FORM); setErrors({}); setView("list");
           showToast("✅ Restaurant gespeichert!");
-        } catch {
-          showToast("⚠️ Fehler beim Speichern");
-        }
+        } catch { showToast("⚠️ Fehler beim Speichern"); }
         setSaving(false);
       };
- 
+
+      const handleEdit = (r) => {
+        const norm = normalizeRestaurant(r);
+        const myRating = norm.ratings?.[user] || EMPTY_RATING;
+        setForm({
+          name: r.name, city: r.city,
+          cuisines: Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []),
+          food: myRating.food, service: myRating.service,
+          price: myRating.price, stars: myRating.stars,
+        });
+        setEditingId(r.id);
+        setSelected(null);
+        setView("add");
+      };
+
+      const handleUpdate = async () => {
+        const e = validate();
+        if (Object.keys(e).length) { setErrors(e); return; }
+        setSaving(true);
+        try {
+          await db.ref("restaurants/"+editingId).update({
+            name: form.name, city: form.city, cuisines: form.cuisines,
+          });
+          await db.ref(`restaurants/${editingId}/ratings/${user}`).set({
+            food:form.food, service:form.service, price:form.price, stars:form.stars
+          });
+          setForm(EMPTY_FORM); setEditingId(null); setErrors({}); setView("list");
+          showToast("✅ Restaurant aktualisiert!");
+        } catch { showToast("⚠️ Fehler beim Speichern"); }
+        setSaving(false);
+      };
+
       const handleDelete = async id => {
         try {
           await db.ref("restaurants/"+id).remove();
           setSelected(null);
           showToast("🗑️ Eintrag gelöscht");
-        } catch {
-          showToast("⚠️ Fehler beim Löschen");
-        }
+        } catch { showToast("⚠️ Fehler beim Löschen"); }
       };
- 
+
+      // Eigene Wertung auf fremdes Restaurant abgeben (oder eigene bearbeiten)
+      const startRate = (r) => {
+        const norm = normalizeRestaurant(r);
+        const myRating = norm.ratings?.[user];
+        setRatingForm(myRating || EMPTY_RATING);
+        setRatingTarget(r);
+        setSelected(null);
+        setView("rate");
+      };
+
+      const handleSaveRating = async () => {
+        setSaving(true);
+        try {
+          await db.ref(`restaurants/${ratingTarget.id}/ratings/${user}`).set(ratingForm);
+          setView("list"); setRatingTarget(null);
+          showToast("✅ Wertung gespeichert!");
+        } catch { showToast("⚠️ Fehler beim Speichern"); }
+        setSaving(false);
+      };
+
       const f = (k,v) => setForm(p=>({...p,[k]:v}));
- 
+      const rf = (k,v) => setRatingForm(p=>({...p,[k]:v}));
+
+      // ── Loading ────────────────────────────────────────────────────────────
+
       if (loading) return (
         <div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
           <div style={{fontSize:48}}>🍽️</div>
           <div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade Restaurants…</div>
         </div>
       );
- 
+
+      // ── Render ─────────────────────────────────────────────────────────────
+
       return (
         <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:80,transition:"background 0.3s"}}>
- 
+
           {/* Header */}
           <div style={{background:t.headerBg,padding:"24px 20px 20px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
@@ -382,67 +534,108 @@
                 {restaurants.length} Restaurant{restaurants.length!==1?"s":""} bewertet
               </div>
             </div>
-            <button onClick={()=>setDark(d=>!d)} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontSize:16,marginTop:2,flexShrink:0}}>
+            <button onClick={()=>setDark(d=>!d)}
+              style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontSize:16,marginTop:2,flexShrink:0}}>
               {dark?"☀️":"🌙"}
             </button>
           </div>
           <div style={{background:"rgba(0,0,0,0.25)",padding:"8px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 Angemeldet als <strong style={{color:"white"}}>{user}</strong></span>
-            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}}
+              style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
+              Abmelden
+            </button>
           </div>
- 
-          {/* List View */}
+
+          {/* ── Listen-Ansicht ─────────────────────────────────────────────── */}
           {view==="list" && (
             <div style={{padding:"20px 16px"}}>
-              {(cities.length>0||cuisineList.length>0) && (
-                <div style={{display:"flex",gap:10,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
-                  {[["city","Alle Städte",cities],["cuisine","Alle Küchen",cuisineList]].map(([key,placeholder,opts])=>(
+
+              {/* Suchfeld */}
+              <div style={{position:"relative",marginBottom:12}}>
+                <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,pointerEvents:"none"}}>🔍</span>
+                <input
+                  value={filter.search}
+                  onChange={e=>setFilter(p=>({...p,search:e.target.value}))}
+                  placeholder="Restaurant suchen…"
+                  style={{width:"100%",padding:"11px 14px 11px 40px",borderRadius:12,fontSize:14,border:`1.5px solid ${filter.search?t.filterOn:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
+                {filter.search && (
+                  <button onClick={()=>setFilter(p=>({...p,search:""}))}
+                    style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,cursor:"pointer",color:t.sub}}>×</button>
+                )}
+              </div>
+
+              {/* Filter-Dropdowns */}
+              {(cities.length>0||cuisineList.length>0||allRaters.length>0) && (
+                <div style={{display:"flex",gap:8,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
+                  {[
+                    ["city",    "Alle Städte",   cities],
+                    ["cuisine", "Alle Küchen",   cuisineList],
+                    ["author",  "Alle Bewerter", allRaters],
+                  ].map(([key,placeholder,opts])=>(
                     <select key={key} value={filter[key]} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
-                      style={{padding:"7px 12px",borderRadius:20,border:`1px solid ${filter[key]?t.filterOn:t.filterBorder}`,background:filter[key]?t.filterOn:t.filterBg,color:filter[key]?t.filterOnColor:t.filterColor,fontSize:13,cursor:"pointer",outline:"none",flexShrink:0}}>
+                      style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${filter[key]?t.filterOn:t.filterBorder}`,background:filter[key]?t.filterOn:t.filterBg,color:filter[key]?t.filterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
                       <option value="">{placeholder}</option>
                       {opts.map(o=><option key={o}>{o}</option>)}
                     </select>
                   ))}
                 </div>
               )}
+
+              {/* Ergebnis-Anzahl bei aktivem Filter */}
+              {(filter.city||filter.cuisine||filter.author||filter.search) && (
+                <div style={{fontSize:12,color:t.sub,marginBottom:12}}>
+                  {filtered.length} Ergebnis{filtered.length!==1?"se":""} gefunden
+                  <button onClick={()=>setFilter({city:"",cuisine:"",author:"",search:""})}
+                    style={{marginLeft:10,fontSize:11,color:t.accent,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
+                    Filter zurücksetzen
+                  </button>
+                </div>
+              )}
+
               {filtered.length===0 ? (
                 <div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}>
                   <div style={{fontSize:48}}>🍽️</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>Noch keine Restaurants</div>
-                  <div style={{fontSize:13,marginTop:8}}>Füge dein erstes Restaurant hinzu!</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>
+                    {restaurants.length===0 ? "Noch keine Restaurants" : "Keine Treffer"}
+                  </div>
+                  <div style={{fontSize:13,marginTop:8}}>
+                    {restaurants.length===0 ? "Füge dein erstes Restaurant hinzu!" : "Versuche andere Filter."}
+                  </div>
                 </div>
-              ) : filtered.map(r=><Card key={r.id} r={r} onClick={()=>setSelected(r)} t={t} />)}
+              ) : filtered.map(r=>(
+                <Card key={r.id} r={r} onClick={()=>setSelected(r)} t={t} />
+              ))}
             </div>
           )}
- 
-          {/* Add / Edit View */}
+
+          {/* ── Hinzufügen / Bearbeiten ─────────────────────────────────────── */}
           {view==="add" && (
             <div style={{padding:"20px 16px"}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-                {editingId && <button onClick={()=>{setView("list");setForm(EMPTY_FORM);setEditingId(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>}
+                <button onClick={()=>{setView("list");setForm(EMPTY_FORM);setEditingId(null);setErrors({});}}
+                  style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>
                   {editingId ? "Restaurant bearbeiten" : "Restaurant hinzufügen"}
                 </div>
               </div>
- 
+
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Restaurant Name</label>
                 <input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco"
                   style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
                 {errors.name && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}
               </div>
- 
+
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label>
                 <input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München"
                   list="city-suggestions"
                   style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
-                <datalist id="city-suggestions">
-                  {cities.map(c=><option key={c} value={c} />)}
-                </datalist>
+                <datalist id="city-suggestions">{cities.map(c=><option key={c} value={c} />)}</datalist>
                 {errors.city && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.city}</div>}
               </div>
- 
+
               <div style={{marginBottom:20}}>
                 <label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>
                   Art der Küche
@@ -453,60 +646,90 @@
                 <div style={{fontSize:11,color:t.tick,marginBottom:8}}>Bis zu 3 Küchen auswählbar</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                   {CUISINES.map(c=>{
-                    const selected = form.cuisines.includes(c);
-                    const disabled = !selected && form.cuisines.length >= 3;
+                    const sel      = form.cuisines.includes(c);
+                    const disabled = !sel && form.cuisines.length >= 3;
                     return (
                       <button key={c} onClick={()=>{
                         if(disabled) return;
-                        const next = selected
-                          ? form.cuisines.filter(x=>x!==c)
-                          : [...form.cuisines, c];
-                        f("cuisines", next);
-                        setErrors(p=>({...p,cuisines:""}));
+                        const next = sel ? form.cuisines.filter(x=>x!==c) : [...form.cuisines, c];
+                        f("cuisines",next); setErrors(p=>({...p,cuisines:""}));
                       }}
                         style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:disabled?"not-allowed":"pointer",
-                          border:`1.5px solid ${selected?t.chipOn:t.chipBorder}`,
-                          background:selected?t.chipOn:t.chipBg,
-                          color:selected?t.chipOnColor:disabled?"#ccc":t.chipColor,
-                          opacity:disabled?0.4:1,
-                          transition:"all 0.15s"}}>{c}</button>
+                          border:`1.5px solid ${sel?t.chipOn:t.chipBorder}`,
+                          background:sel?t.chipOn:t.chipBg,
+                          color:sel?t.chipOnColor:disabled?"#ccc":t.chipColor,
+                          opacity:disabled?0.4:1,transition:"all 0.15s"}}>
+                        {c}
+                      </button>
                     );
                   })}
                 </div>
                 {errors.cuisines && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisines}</div>}
               </div>
- 
+
               <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-                <Slider label="🍽️ Essen" value={form.food} min={0} max={10} onChange={v=>f("food",v)} color="#2e7d52" t={t} />
-                <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t} />
-                <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.accent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t} />
-                <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t} />
+                <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>
+                  {editingId ? "Deine Wertung" : "Deine Bewertung"}
+                </div>
+                <Slider label="🍽️ Essen"   value={form.food}    min={0} max={10} onChange={v=>f("food",v)}    color="#2e7d52" t={t} />
+                <Slider label="🤝 Service"  value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t} />
+                <Slider label="💶 Preis"   value={form.price}   min={1} max={5}  onChange={v=>f("price",v)}   color={t.accent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t} />
+                <Slider label="⭐ Sterne"  value={form.stars}   min={0} max={10} onChange={v=>f("stars",v)}   color="#e8a020" t={t} />
               </div>
- 
+
               <button onClick={editingId ? handleUpdate : handleAdd} disabled={saving}
                 style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
                 {saving ? "Wird gespeichert…" : editingId ? "Änderungen speichern" : "Restaurant speichern"}
               </button>
             </div>
           )}
- 
+
+          {/* ── Wertung abgeben ─────────────────────────────────────────────── */}
+          {view==="rate" && ratingTarget && (
+            <div style={{padding:"20px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+                <button onClick={()=>{setView("list");setRatingTarget(null);}}
+                  style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>
+                  Wertung abgeben
+                </div>
+              </div>
+              <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>
+                {ratingTarget.name} · {ratingTarget.city}
+              </div>
+
+              <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+                <Slider label="🍽️ Essen"   value={ratingForm.food}    min={0} max={10} onChange={v=>rf("food",v)}    color="#2e7d52" t={t} />
+                <Slider label="🤝 Service"  value={ratingForm.service} min={0} max={10} onChange={v=>rf("service",v)} color="#1a5f8c" t={t} />
+                <Slider label="💶 Preis"   value={ratingForm.price}   min={1} max={5}  onChange={v=>rf("price",v)}   color={t.accent} display={`${"€".repeat(ratingForm.price)} ${PRICE_LABELS[ratingForm.price]}`} t={t} />
+                <Slider label="⭐ Sterne"  value={ratingForm.stars}   min={0} max={10} onChange={v=>rf("stars",v)}   color="#e8a020" t={t} />
+              </div>
+
+              <button onClick={handleSaveRating} disabled={saving}
+                style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
+                {saving ? "Wird gespeichert…" : "Wertung speichern"}
+              </button>
+            </div>
+          )}
+
           {/* Bottom Nav */}
           <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
             {[["list","📋","Übersicht"],["add","➕","Hinzufügen"]].map(([v,icon,lbl])=>(
-              <button key={v} onClick={()=>setView(v)} style={{flex:1,padding:"14px 0 18px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+              <button key={v} onClick={()=>{ setView(v); if(v==="add"){setForm(EMPTY_FORM);setEditingId(null);setErrors({});} }}
+                style={{flex:1,padding:"14px 0 18px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                 <span style={{fontSize:22}}>{icon}</span>
                 <span style={{fontSize:11,color:view===v?t.navActive:t.navInactive,fontWeight:view===v?700:400}}>{lbl}</span>
                 {view===v && <div style={{width:20,height:2,background:t.navActive,borderRadius:1}} />}
               </button>
             ))}
           </div>
- 
-          <Modal r={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} t={t} />
+
+          <Modal r={selected} user={user} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} onRate={startRate} t={t} />
           <Toast msg={toast} t={t} />
         </div>
       );
     }
- 
+
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<App />);
   </script>
