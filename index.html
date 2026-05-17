@@ -569,7 +569,7 @@ function WhiskyCard({w,onClick,t}){
       <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
       <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <Badge value={avg.rauchigkeit} color="#505868"/><span style={{fontSize:11,color:t.sub}}>Rauchigkeit</span>
-        <Badge value={avg.fruchtigkeit} color="#2060a0"/><span style={{fontSize:11,color:t.sub}}>Fruchtigkeit</span>
+        <Badge value={avg.fruchtigkeit} color="#c0306a"/><span style={{fontSize:11,color:t.sub}}>🍒 Fruchtigkeit</span>
       </div>
       {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
     </div>
@@ -617,8 +617,8 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#505868"}}>{avg.rauchigkeit}/10</div>
           </div>
           <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-            <div style={{fontSize:11,color:t.sub}}>💧 Fruchtigkeit</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#2060a0"}}>{avg.fruchtigkeit}/10</div>
+            <div style={{fontSize:11,color:t.sub}}>🍒 Fruchtigkeit</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#c0306a"}}>{avg.fruchtigkeit}/10</div>
           </div>
         </div>
         <div style={{marginTop:20}}>
@@ -627,7 +627,7 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
             <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.whiskyAccent}}>★ {rating.stars}/10</span></div>
               <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}>
-                <span>💨 {rating.rauchigkeit}/10</span><span>💧 {rating.fruchtigkeit}/10</span>
+                <span>💨 {rating.rauchigkeit}/10</span><span>🍒 {rating.fruchtigkeit}/10</span>
               </div>
               {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
             </div>
@@ -672,7 +672,7 @@ function WhiskyRatingFields({form,setF,t}){
     <>
       <Slider label="⭐ Gesamtgeschmack" value={form.stars} min={0} max={10} onChange={v=>setF("stars",v)} color={t.whiskyAccent} t={t}/>
       <Slider label="💨 Rauchigkeit" value={form.rauchigkeit} min={0} max={10} onChange={v=>setF("rauchigkeit",v)} color="#505868" t={t}/>
-      <Slider label="💧 Fruchtigkeit" value={form.fruchtigkeit} min={0} max={10} onChange={v=>setF("fruchtigkeit",v)} color="#2060a0" t={t}/>
+      <Slider label="🍒 Fruchtigkeit" value={form.fruchtigkeit} min={0} max={10} onChange={v=>setF("fruchtigkeit",v)} color="#c0306a" t={t}/>
       <div>
         <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
         <textarea value={form.kommentar} onChange={e=>setF("kommentar",e.target.value)}
