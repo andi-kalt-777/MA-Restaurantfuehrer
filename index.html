@@ -1,32 +1,32 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Restaurantführer der Montagabendgesellschaft</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+  <title>Montagabendgesellschaft</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet"/>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #f7f3ee; font-family: system-ui, sans-serif; }
-    input, select, button { font-family: inherit; }
-    input::placeholder { color: #b0a090; }
-    select option { background: white; color: #2c1f14; }
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #c0a880; border-radius: 2px; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f7f3ee;font-family:system-ui,sans-serif}
+    input,select,button,textarea{font-family:inherit}
+    input::placeholder,textarea::placeholder{color:#b0a090}
+    select option{background:white;color:#2c1f14}
+    ::-webkit-scrollbar{width:4px;height:4px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#c0a880;border-radius:2px}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
 
-  <script>
-    // ⚠️ HIER DEINE FIREBASE-KONFIGURATION EINFÜGEN
-    const firebaseConfig = {
+<script>
+  // ⚠️ FIREBASE KONFIGURATION EINFÜGEN
+  const firebaseConfig={
   apiKey: "AIzaSyALr6jetmhTYj9XIGZQ7aBs_gxAFLnt4x4",
   authDomain: "montagabendrestaurants.firebaseapp.com",
   databaseURL: "https://montagabendrestaurants-default-rtdb.europe-west1.firebasedatabase.app",
@@ -35,703 +35,809 @@
   messagingSenderId: "977029677061",
   appId: "1:977029677061:web:d2b7b3d94820f710e1dc6c",
   measurementId: "G-FG9LH4LK9H"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-  </script>
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db=firebase.database();
+</script>
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+<script type="text/babel">
+const {useState,useEffect}=React;
+const PASSWORD="Polonia2025";
 
-    const PASSWORD = "Polonia2025";
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-    // ── Hilfsfunktionen für das neue Datenmodell ──────────────────────────────
+function normalizeRest(r){
+  if(r.ratings)return r;
+  return{...r,ratings:r.author?{[r.author]:{food:r.food??5,service:r.service??5,price:r.price??3,stars:r.stars??7}}:{}};
+}
+function getAvgRest(r){
+  const vals=Object.values(normalizeRest(r).ratings||{});
+  if(!vals.length)return{food:0,service:0,price:0,stars:0,avg:0,count:0};
+  const n=vals.length;
+  const food=+(vals.reduce((s,x)=>s+x.food,0)/n).toFixed(1);
+  const service=+(vals.reduce((s,x)=>s+x.service,0)/n).toFixed(1);
+  const price=Math.round(vals.reduce((s,x)=>s+x.price,0)/n);
+  const stars=+(vals.reduce((s,x)=>s+x.stars,0)/n).toFixed(1);
+  return{food,service,price,stars,avg:+((food+service)/2).toFixed(1),count:n};
+}
+function getAvgWhisky(w){
+  const vals=Object.values(w.ratings||{});
+  if(!vals.length)return{stars:0,rauchigkeit:0,feuchtigkeit:0,count:0};
+  const n=vals.length;
+  return{
+    stars:+(vals.reduce((s,x)=>s+x.stars,0)/n).toFixed(1),
+    rauchigkeit:+(vals.reduce((s,x)=>s+x.rauchigkeit,0)/n).toFixed(1),
+    feuchtigkeit:+(vals.reduce((s,x)=>s+x.feuchtigkeit,0)/n).toFixed(1),
+    count:n
+  };
+}
 
-    // Alte Einträge (ohne ratings-Objekt) in neues Format umwandeln
-    function normalizeRestaurant(r) {
-      if (r.ratings) return r;
-      return {
-        ...r,
-        ratings: r.author ? {
-          [r.author]: {
-            food:    r.food    ?? 5,
-            service: r.service ?? 5,
-            price:   r.price   ?? 3,
-            stars:   r.stars   ?? 7,
-          }
-        } : {}
-      };
-    }
+// ── Konstanten ─────────────────────────────────────────────────────────────
 
-    // Durchschnittswerte aller Bewertungen berechnen
-    function getAvgRating(r) {
-      const norm = normalizeRestaurant(r);
-      const vals = Object.values(norm.ratings || {});
-      if (!vals.length) return { food:0, service:0, price:0, stars:0, avg:0, count:0 };
-      const n = vals.length;
-      const food    = +(vals.reduce((s,x) => s + x.food,    0) / n).toFixed(1);
-      const service = +(vals.reduce((s,x) => s + x.service, 0) / n).toFixed(1);
-      const price   = Math.round(vals.reduce((s,x) => s + x.price, 0) / n);
-      const stars   = +(vals.reduce((s,x) => s + x.stars,   0) / n).toFixed(1);
-      const avg     = +((food + service) / 2).toFixed(1);
-      return { food, service, price, stars, avg, count: n };
-    }
+const CUISINES=["Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch","Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch","Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch","Polnisch","Sushi","Burger","Fusion","Eisdiele","Andere"];
+const WHISKY_TYPES=["Single Malt","Blended Malt","Blended Scotch","Bourbon","Rye Whiskey","Irish Whiskey","Japanese Whisky","Highlands","Speyside","Islay","Islands","Lowlands","Campbeltown","Amerikanisch","Kanadisch","Andere"];
+const PRICE_LABELS=["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
+const EMPTY_REST={city:"",name:"",cuisines:[],service:5,food:5,price:3,stars:7};
+const EMPTY_RATING={service:5,food:5,price:3,stars:7};
+const EMPTY_SUGG={city:"",name:"",cuisines:[]};
+const EMPTY_WHISKY={name:"",distillery:"",types:[],stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""};
+const EMPTY_W_RATING={stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""};
+const EMPTY_W_SUGG={name:"",distillery:"",types:[]};
 
-    // ── Login ─────────────────────────────────────────────────────────────────
+// ── Themes ─────────────────────────────────────────────────────────────────
 
-    function LoginScreen({ onLogin }) {
-      const [pw, setPw]     = useState("");
-      const [name, setName] = useState("");
-      const [step, setStep] = useState("pw");
-      const [error, setError] = useState("");
+const LIGHT={
+  bg:"#f7f3ee",card:"white",cardBorder:"#f0e8e0",cardShadow:"rgba(0,0,0,0.07)",
+  restHeaderBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",restHeaderSub:"#c4a882",
+  whiskyHeaderBg:"linear-gradient(135deg,#2d1900 0%,#6b3d08 100%)",whiskyHeaderSub:"#d4a840",
+  title:"#2c1f14",sub:"#9a8878",label:"#7a6650",sliderTrack:"#e8e0d6",
+  tick:"#b0a090",inputBg:"white",inputBorder:"#e0d8cc",inputColor:"#2c1f14",
+  innerCard:"#faf8f5",navBg:"white",navBorder:"#f0e8e0",navShadow:"rgba(0,0,0,0.08)",
+  restNavActive:"#4a2e1a",whiskyNavActive:"#6b3d08",navInactive:"#b0a090",
+  restAccent:"#c4622c",whiskyAccent:"#c87800",
+  chipBg:"white",chipBorder:"#e0d8cc",chipColor:"#4a2e1a",
+  restChipOn:"#4a2e1a",restChipOnColor:"white",
+  whiskyChipOn:"#6b3d08",whiskyChipOnColor:"white",
+  filterBg:"white",filterColor:"#4a2e1a",filterBorder:"#e0d8cc",
+  restFilterOn:"#4a2e1a",restFilterOnColor:"white",
+  whiskyFilterOn:"#6b3d08",whiskyFilterOnColor:"white",
+  restBtn:"linear-gradient(135deg,#2c1f14,#4a2e1a)",
+  whiskyBtn:"linear-gradient(135deg,#2d1900,#6b3d08)",btnColor:"white",
+  thumb:"white",starEmpty:"#e0d8cc",modal:"white",handle:"#e0d8cc",empty:"#b0a090",
+  restToast:"#2c1f14",whiskyToast:"#6b3d08",toastColor:"white",
+  ratingRow:"#f7f3ee",ratingBorder:"#f0e8e0",
+  secondaryBtn:"#f0e8e0",secondaryBtnColor:"#2c1f14",
+  suggCard:"#fffbf5",suggBorder:"#ede0c8",restSuggAccent:"#8a6030",whiskySuggAccent:"#8a5a00",suggBadgeBg:"#f5ead8",
+  modeSwitchBg:"rgba(255,255,255,0.12)",modeSwitchBorder:"rgba(255,255,255,0.25)",
+};
+const DARK={
+  bg:"#0f0d0b",card:"#1c1612",cardBorder:"#2e2218",cardShadow:"rgba(0,0,0,0.5)",
+  restHeaderBg:"linear-gradient(135deg,#080604 0%,#161008 100%)",restHeaderSub:"#8a6a44",
+  whiskyHeaderBg:"linear-gradient(135deg,#100800 0%,#221200 100%)",whiskyHeaderSub:"#8a6010",
+  title:"#f0e8dc",sub:"#7a6858",label:"#9a8878",sliderTrack:"#2e2218",
+  tick:"#5a4838",inputBg:"#161210",inputBorder:"#2e2218",inputColor:"#f0e8dc",
+  innerCard:"#141210",navBg:"#0f0d0b",navBorder:"#2e2218",navShadow:"rgba(0,0,0,0.5)",
+  restNavActive:"#d4a870",whiskyNavActive:"#e8a020",navInactive:"#3a2a1a",
+  restAccent:"#e07840",whiskyAccent:"#e8a020",
+  chipBg:"#1c1612",chipBorder:"#2e2218",chipColor:"#b09070",
+  restChipOn:"#d4a870",restChipOnColor:"#0f0d0b",
+  whiskyChipOn:"#e8a020",whiskyChipOnColor:"#0f0d0b",
+  filterBg:"#1c1612",filterColor:"#b09070",filterBorder:"#2e2218",
+  restFilterOn:"#d4a870",restFilterOnColor:"#0f0d0b",
+  whiskyFilterOn:"#e8a020",whiskyFilterOnColor:"#0f0d0b",
+  restBtn:"linear-gradient(135deg,#c49050,#e07840)",
+  whiskyBtn:"linear-gradient(135deg,#b07010,#e8a020)",btnColor:"#0f0d0b",
+  thumb:"#0f0d0b",starEmpty:"#2a1e12",modal:"#1c1612",handle:"#2e2218",empty:"#3a2a1a",
+  restToast:"#d4a870",whiskyToast:"#e8a020",toastColor:"#0f0d0b",
+  ratingRow:"#141210",ratingBorder:"#2e2218",
+  secondaryBtn:"#2e2218",secondaryBtnColor:"#d4a870",
+  suggCard:"#161410",suggBorder:"#2a2010",restSuggAccent:"#c4a060",whiskySuggAccent:"#c4a020",suggBadgeBg:"#1e1a0e",
+  modeSwitchBg:"rgba(255,255,255,0.08)",modeSwitchBorder:"rgba(255,255,255,0.15)",
+};
 
-      const checkPw = () => {
-        if (pw === PASSWORD) { setError(""); setStep("name"); }
-        else setError("Falsches Passwort. Bitte erneut versuchen.");
-      };
-      const doLogin = () => {
-        if (!name.trim()) { setError("Bitte gib deinen Namen ein."); return; }
-        localStorage.setItem("rmg_user", name.trim());
-        onLogin(name.trim());
-      };
+// ── Shared UI-Komponenten ──────────────────────────────────────────────────
 
-      return (
-        <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-          <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-            <div style={{fontSize:52,marginBottom:12}}>🍽️</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:20,color:"#2c1f14",lineHeight:1.3,marginBottom:6}}>
-              Restaurantführer der<br/>Montagabendgesellschaft
-            </div>
-            <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
+function Slider({label,value,min,max,onChange,color,display,t}){
+  const pct=((value-min)/(max-min))*100;
+  return(
+    <div style={{marginBottom:20}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <span style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label}}>{label}</span>
+        <span style={{fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{display??value}</span>
+      </div>
+      <div style={{position:"relative",height:6,borderRadius:3,background:t.sliderTrack}}>
+        <div style={{position:"absolute",left:0,top:0,height:"100%",borderRadius:3,background:`linear-gradient(90deg,${color}88,${color})`,width:`${pct}%`,transition:"width 0.1s"}}/>
+        <input type="range" min={min} max={max} value={value} onChange={e=>onChange(+e.target.value)}
+          style={{position:"absolute",top:-8,left:0,width:"100%",height:22,opacity:0,cursor:"pointer",zIndex:2,margin:0}}/>
+        <div style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:`calc(${pct}% - 10px)`,width:20,height:20,borderRadius:"50%",background:color,boxShadow:`0 2px 8px ${color}55`,border:`3px solid ${t.thumb}`,transition:"left 0.1s",pointerEvents:"none"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+        <span style={{fontSize:10,color:t.tick}}>{min}</span>
+        <span style={{fontSize:10,color:t.tick}}>{max}</span>
+      </div>
+    </div>
+  );
+}
 
-            {step === "pw" ? (
-              <>
-                <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}}
-                  onKeyDown={e=>e.key==="Enter"&&checkPw()} placeholder="Passwort eingeben"
-                  style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center",letterSpacing:2}} />
-                {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-                <button onClick={checkPw} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
-                  Weiter →
-                </button>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize:13,color:"#7a6650",marginBottom:12,fontFamily:"'Playfair Display',serif"}}>Wie heißt du?</div>
-                <input value={name} onChange={e=>{setName(e.target.value);setError("");}}
-                  onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="Dein Name"
-                  style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center"}} />
-                {error && <div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-                <button onClick={doLogin} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
-                  Einloggen
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      );
-    }
+function Stars({value,t}){
+  return(<div style={{display:"flex",gap:2,flexWrap:"wrap"}}>{[...Array(10)].map((_,i)=><span key={i} style={{fontSize:14,color:i<Math.round(value)?"#e8a020":t.starEmpty}}>★</span>)}</div>);
+}
+function Badge({value,max=10,color}){
+  const d=typeof value==="number"&&!Number.isInteger(value)?value.toFixed(1):value;
+  return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>{d}/{max}</span>;
+}
+function Toast({msg,color,textColor}){
+  if(!msg)return null;
+  return <div style={{position:"fixed",bottom:96,left:"50%",transform:"translateX(-50%)",background:color,color:textColor,padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>{msg}</div>;
+}
+function TypeChips({value,onChange,options,chipOn,chipOnColor,t}){
+  return(
+    <>
+      <div style={{fontSize:11,color:t.tick,marginBottom:8}}>Bis zu 3 auswählbar</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {options.map(c=>{
+          const sel=value.includes(c);const disabled=!sel&&value.length>=3;
+          return(<button key={c} onClick={()=>{if(disabled)return;onChange(sel?value.filter(x=>x!==c):[...value,c]);}}
+            style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:disabled?"not-allowed":"pointer",border:`1.5px solid ${sel?chipOn:t.chipBorder}`,background:sel?chipOn:t.chipBg,color:sel?chipOnColor:disabled?"#ccc":t.chipColor,opacity:disabled?0.4:1,transition:"all 0.15s"}}>{c}</button>);
+        })}
+      </div>
+    </>
+  );
+}
 
-    // ── Konstanten ────────────────────────────────────────────────────────────
-
-    const CUISINES = [
-      "Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch",
-      "Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch",
-      "Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch",
-      "Polnisch","Sushi","Burger","Fusion","Eisdiele","Andere"
-    ];
-    const PRICE_LABELS = ["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
-    const EMPTY_FORM   = { city:"", name:"", cuisines:[], service:5, food:5, price:3, stars:7 };
-    const EMPTY_RATING = { service:5, food:5, price:3, stars:7 };
-
-    // ── Themes ────────────────────────────────────────────────────────────────
-
-    const LIGHT = {
-      bg:"#f7f3ee", card:"white", cardBorder:"#f0e8e0", cardShadow:"rgba(0,0,0,0.07)",
-      headerBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)", headerSub:"#c4a882",
-      title:"#2c1f14", sub:"#9a8878", label:"#7a6650", sliderTrack:"#e8e0d6",
-      tick:"#b0a090", inputBg:"white", inputBorder:"#e0d8cc", inputColor:"#2c1f14",
-      innerCard:"#faf8f5", navBg:"white", navBorder:"#f0e8e0", navShadow:"rgba(0,0,0,0.08)",
-      navActive:"#4a2e1a", navInactive:"#b0a090", accent:"#c4622c",
-      chipBg:"white", chipBorder:"#e0d8cc", chipColor:"#4a2e1a",
-      chipOn:"#4a2e1a", chipOnColor:"white",
-      filterOn:"#4a2e1a", filterOnColor:"white", filterBg:"white", filterColor:"#4a2e1a", filterBorder:"#e0d8cc",
-      btn:"linear-gradient(135deg,#2c1f14,#4a2e1a)", btnColor:"white",
-      thumb:"white", starEmpty:"#e0d8cc", modal:"white", handle:"#e0d8cc", empty:"#b0a090",
-      toast:"#2c1f14", toastColor:"white", ratingRow:"#f7f3ee", ratingBorder:"#f0e8e0",
-      secondaryBtn:"#f0e8e0", secondaryBtnColor:"#2c1f14",
-    };
-    const DARK = {
-      bg:"#0f0d0b", card:"#1c1612", cardBorder:"#2e2218", cardShadow:"rgba(0,0,0,0.5)",
-      headerBg:"linear-gradient(135deg,#080604 0%,#161008 100%)", headerSub:"#8a6a44",
-      title:"#f0e8dc", sub:"#7a6858", label:"#9a8878", sliderTrack:"#2e2218",
-      tick:"#5a4838", inputBg:"#161210", inputBorder:"#2e2218", inputColor:"#f0e8dc",
-      innerCard:"#141210", navBg:"#0f0d0b", navBorder:"#2e2218", navShadow:"rgba(0,0,0,0.5)",
-      navActive:"#d4a870", navInactive:"#3a2a1a", accent:"#e07840",
-      chipBg:"#1c1612", chipBorder:"#2e2218", chipColor:"#b09070",
-      chipOn:"#d4a870", chipOnColor:"#0f0d0b",
-      filterOn:"#d4a870", filterOnColor:"#0f0d0b", filterBg:"#1c1612", filterColor:"#b09070", filterBorder:"#2e2218",
-      btn:"linear-gradient(135deg,#c49050,#e07840)", btnColor:"#0f0d0b",
-      thumb:"#0f0d0b", starEmpty:"#2a1e12", modal:"#1c1612", handle:"#2e2218", empty:"#3a2a1a",
-      toast:"#d4a870", toastColor:"#0f0d0b", ratingRow:"#141210", ratingBorder:"#2e2218",
-      secondaryBtn:"#2e2218", secondaryBtnColor:"#d4a870",
-    };
-
-    // ── Shared UI-Komponenten ─────────────────────────────────────────────────
-
-    function Slider({ label, value, min, max, onChange, color, display, t }) {
-      const pct = ((value - min) / (max - min)) * 100;
-      return (
-        <div style={{marginBottom:20}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <span style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label}}>{label}</span>
-            <span style={{fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{display ?? value}</span>
-          </div>
-          <div style={{position:"relative",height:6,borderRadius:3,background:t.sliderTrack}}>
-            <div style={{position:"absolute",left:0,top:0,height:"100%",borderRadius:3,background:`linear-gradient(90deg,${color}88,${color})`,width:`${pct}%`,transition:"width 0.1s"}} />
-            <input type="range" min={min} max={max} value={value} onChange={e=>onChange(+e.target.value)}
-              style={{position:"absolute",top:-8,left:0,width:"100%",height:22,opacity:0,cursor:"pointer",zIndex:2,margin:0}} />
-            <div style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:`calc(${pct}% - 10px)`,width:20,height:20,borderRadius:"50%",background:color,boxShadow:`0 2px 8px ${color}55`,border:`3px solid ${t.thumb}`,transition:"left 0.1s",pointerEvents:"none"}} />
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-            <span style={{fontSize:10,color:t.tick}}>{min}</span>
-            <span style={{fontSize:10,color:t.tick}}>{max}</span>
-          </div>
-        </div>
-      );
-    }
-
-    function Stars({ value, t }) {
-      const rounded = Math.round(value);
-      return (
-        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-          {[...Array(10)].map((_,i)=>(
-            <span key={i} style={{fontSize:14,color:i<rounded?"#e8a020":t.starEmpty}}>★</span>
+function FilterBar({filter,setFilter,col1,col2,col1Label,col2Label,extra=[],filterOn,filterOnColor,t}){
+  const hasActive=Object.values(filter).some(Boolean);
+  return(
+    <>
+      <div style={{position:"relative",marginBottom:12}}>
+        <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,pointerEvents:"none"}}>🔍</span>
+        <input value={filter.search} onChange={e=>setFilter(p=>({...p,search:e.target.value}))} placeholder="Suchen…"
+          style={{width:"100%",padding:"11px 14px 11px 40px",borderRadius:12,fontSize:14,border:`1.5px solid ${filter.search?filterOn:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>
+        {filter.search&&<button onClick={()=>setFilter(p=>({...p,search:""}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,cursor:"pointer",color:t.sub}}>×</button>}
+      </div>
+      {(col1.length>0||col2.length>0||extra.length>0)&&(
+        <div style={{display:"flex",gap:8,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+          {[[filter.k1||"k1",col1Label||"Filter 1",col1],...(col2.length>0?[[filter.k2||"k2",col2Label||"Filter 2",col2]]:[]),...extra].map(([key,ph,opts])=>(
+            <select key={key} value={filter[key]||""} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
+              style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${filter[key]?filterOn:t.filterBorder}`,background:filter[key]?filterOn:t.filterBg,color:filter[key]?filterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
+              <option value="">{ph}</option>
+              {opts.map(o=><option key={o}>{o}</option>)}
+            </select>
           ))}
         </div>
-      );
-    }
+      )}
+      {hasActive&&<div style={{marginBottom:12}}><button onClick={()=>setFilter(Object.fromEntries(Object.keys(filter).map(k=>[k,""])))} style={{fontSize:11,color:t.restAccent,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Filter zurücksetzen</button></div>}
+    </>
+  );
+}
 
-    function Badge({ value, max=10, color }) {
-      const display = typeof value === "number" && !Number.isInteger(value) ? value.toFixed(1) : value;
-      return (
-        <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>
-          {display}/{max}
-        </span>
-      );
-    }
+// ── Login ──────────────────────────────────────────────────────────────────
 
-    function Toast({ msg, t }) {
-      if (!msg) return null;
-      return (
-        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:t.toast,color:t.toastColor,padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>
-          {msg}
+function LoginScreen({onLogin}){
+  const [pw,setPw]=useState("");const [name,setName]=useState("");
+  const [step,setStep]=useState("pw");const [error,setError]=useState("");
+  const checkPw=()=>{if(pw===PASSWORD){setError("");setStep("name");}else setError("Falsches Passwort.");};
+  const doLogin=()=>{if(!name.trim()){setError("Bitte Name eingeben.");return;}localStorage.setItem("rmg_user",name.trim());onLogin(name.trim());};
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:48,marginBottom:4}}>🍽️🥃</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:19,color:"#2c1f14",lineHeight:1.3,marginBottom:6}}>Montagabendgesellschaft</div>
+        <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
+        {step==="pw"?(
+          <>
+            <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&checkPw()} placeholder="Passwort eingeben"
+              style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center",letterSpacing:2}}/>
+            {error&&<div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
+            <button onClick={checkPw} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>Weiter →</button>
+          </>
+        ):(
+          <>
+            <div style={{fontSize:13,color:"#7a6650",marginBottom:12,fontFamily:"'Playfair Display',serif"}}>Wie heißt du?</div>
+            <input value={name} onChange={e=>{setName(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="Dein Name"
+              style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center"}}/>
+            {error&&<div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
+            <button onClick={doLogin} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>Einloggen</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared Header ──────────────────────────────────────────────────────────
+
+function AppHeader({user,dark,setDark,mode,setMode,t,title,subtitle,headerBg,headerSub}){
+  const switchIcon=mode==="restaurant"?"🥃":"🍽️";
+  const switchTitle=mode==="restaurant"?"Whisky Führer":"Restaurant Führer";
+  return(
+    <>
+      <div style={{background:headerBg,padding:"20px 20px 16px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,lineHeight:1.3}}>{title}</div>
+          <div style={{fontSize:12,color:headerSub,marginTop:5}}>{subtitle}</div>
         </div>
-      );
-    }
-
-    // ── Card ──────────────────────────────────────────────────────────────────
-
-    function Card({ r, onClick, t }) {
-      const avg = getAvgRating(r);
-      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
-      return (
-        <div onClick={onClick}
-          style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
-          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
-          onMouseLeave={e=>e.currentTarget.style.transform=""}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{flex:1,minWidth:0,paddingRight:8}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
-              <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
-            </div>
-            <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.accent}}>{avg.avg}</div>
-              <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Bewertung{avg.count!==1?"en":""}</div>
-            </div>
-          </div>
-          <div style={{marginTop:10}}><Stars value={avg.stars} t={t} /></div>
-          <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <Badge value={avg.food} color="#2e7d52" />
-            <span style={{fontSize:11,color:t.sub}}>Essen</span>
-            <Badge value={avg.service} color="#1a5f8c" />
-            <span style={{fontSize:11,color:t.sub}}>Service</span>
-            <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(avg.price)}</span>
-          </div>
-          {r.author && (
-            <div style={{textAlign:"right",marginTop:6}}>
-              <span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>eingetragen von {r.author}</span>
-            </div>
-          )}
+        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0,marginLeft:12}}>
+          <button onClick={()=>setDark(d=>!d)} style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>
+            {dark?"☀️":"🌙"}
+          </button>
+          <button onClick={()=>setMode(m=>m==="restaurant"?"whisky":"restaurant")}
+            title={switchTitle}
+            style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>
+            {switchIcon}
+          </button>
         </div>
-      );
-    }
+      </div>
+      <div style={{background:"rgba(0,0,0,0.25)",padding:"7px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 <strong style={{color:"white"}}>{user}</strong></span>
+        <button onClick={()=>{localStorage.removeItem("rmg_user");window.location.reload();}} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+      </div>
+    </>
+  );
+}
 
-    // ── Modal ─────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// RESTAURANT FÜHRER
+// ═══════════════════════════════════════════════════════════════════════════
 
-    function Modal({ r, user, onClose, onDelete, onEdit, onRate, t }) {
-      if (!r) return null;
-      const norm     = normalizeRestaurant(r);
-      const avg      = getAvgRating(r);
-      const cuisines = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
-      const ratings  = Object.entries(norm.ratings || {});
-      const isAuthor = user === r.author;
-      const hasRated = !!norm.ratings?.[user];
+function RestCard({r,onClick,t}){
+  const avg=getAvgRest(r);
+  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+  const raters=Object.keys(normalizeRest(r).ratings||{});
+  const display=raters.length>0?raters:(r.author?[r.author]:[]);
+  return(
+    <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1,minWidth:0,paddingRight:8}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.restAccent}}>{avg.avg}</div>
+          <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
+        </div>
+      </div>
+      <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <Badge value={avg.food} color="#2e7d52"/><span style={{fontSize:11,color:t.sub}}>Essen</span>
+        <Badge value={avg.service} color="#1a5f8c"/><span style={{fontSize:11,color:t.sub}}>Service</span>
+        <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(avg.price)}</span>
+      </div>
+      {display.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {display.join(", ")}</span></div>}
+    </div>
+  );
+}
 
-      return (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-          <div onClick={e=>e.stopPropagation()}
-            style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
+function RestSuggCard({s,onClick,t}){
+  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
+  return(
+    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
+        </div>
+        <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:t.restSuggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
+      </div>
+      <div style={{textAlign:"right",marginTop:8}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>vorgeschlagen von {s.author}</span></div>
+    </div>
+  );
+}
 
-            {/* Handle */}
-            <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}} />
-
-            {/* Titel */}
-            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
-            <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
-
-            {/* Ø Sterne */}
-            <div style={{marginTop:14}}><Stars value={avg.stars} t={t} /></div>
-
-            {/* Ø Scores */}
-            <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              {[["🍽️ Essen",avg.food,"#2e7d52"],["🤝 Service",avg.service,"#1a5f8c"]].map(([lbl,val,col])=>(
-                <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-                  <div style={{fontSize:11,color:t.sub}}>{lbl}</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:col}}>{val}/10</div>
-                  <div style={{fontSize:10,color:t.tick}}>Durchschnitt</div>
-                </div>
-              ))}
+function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
+  if(!r)return null;
+  const norm=normalizeRest(r);const avg=getAvgRest(r);
+  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+  const ratings=Object.entries(norm.ratings||{});
+  const isAuthor=user===r.author;const hasRated=!!norm.ratings?.[user];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
+        <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+        <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
+        <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[["🍽️ Essen",avg.food,"#2e7d52"],["🤝 Service",avg.service,"#1a5f8c"]].map(([lbl,val,col])=>(
+            <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+              <div style={{fontSize:11,color:t.sub}}>{lbl}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:col}}>{val}/10</div>
+              <div style={{fontSize:10,color:t.tick}}>Durchschnitt</div>
             </div>
-            <div style={{marginTop:10,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-              <span style={{fontSize:12,color:t.sub}}>Preis: </span>
-              <span style={{fontWeight:700,color:t.accent}}>{"€".repeat(avg.price)} · {PRICE_LABELS[avg.price]}</span>
+          ))}
+        </div>
+        <div style={{marginTop:10,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <span style={{fontSize:12,color:t.sub}}>Preis: </span>
+          <span style={{fontWeight:700,color:t.restAccent}}>{"€".repeat(avg.price)} · {PRICE_LABELS[avg.price]}</span>
+        </div>
+        <div style={{marginTop:20}}>
+          <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
+          {ratings.map(([author,rating])=>(
+            <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span></div>
+              <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}><span>🍽️ {rating.food}/10</span><span>🤝 {rating.service}/10</span><span>{"€".repeat(rating.price)}</span></div>
             </div>
+          ))}
+        </div>
+        {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <button onClick={()=>onEdit(r)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
+          <button onClick={()=>onDelete(r.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
+        </div>}
+        {!isAuthor&&!hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>⭐ Eigene Wertung abgeben</button>}
+        {!isAuthor&&hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
+      </div>
+    </div>
+  );
+}
 
-            {/* Alle Einzelbewertungen */}
-            <div style={{marginTop:20}}>
-              <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>
-                Alle Bewertungen ({avg.count})
-              </div>
-              {ratings.map(([author, rating]) => (
-                <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span>
-                    <span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span>
-                  </div>
-                  <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}>
-                    <span>🍽️ {rating.food}/10</span>
-                    <span>🤝 {rating.service}/10</span>
-                    <span>{"€".repeat(rating.price)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+function RestSuggModal({s,user,onClose,onDelete,onConvert,t}){
+  if(!s)return null;
+  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
+          <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.restSuggAccent,fontWeight:600}}>💡 Vorschlag</span>
+        </div>
+        <div style={{color:t.sub,fontSize:13}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
+        <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
+          <div style={{fontSize:13,color:t.sub}}>Noch nicht besucht.</div>
+          <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
+        </div>
+        <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>⭐ Jetzt bewerten & übernehmen</button>
+        {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+      </div>
+    </div>
+  );
+}
 
-            {/* Aktions-Buttons */}
-            {isAuthor && (
-              <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <button onClick={()=>onEdit(r)}
-                  style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>
-                  ✏️ Bearbeiten
-                </button>
-                <button onClick={()=>onDelete(r.id)}
-                  style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>
-                  🗑️ Löschen
-                </button>
-              </div>
-            )}
+function RestaurantApp({user,dark,setDark,mode,setMode,t}){
+  const [view,setView]=useState("list");
+  const [activeSection,setSection]=useState("list");
+  const [restaurants,setRestaurants]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState(EMPTY_REST);
+  const [ratingForm,setRatingForm]=useState(EMPTY_RATING);
+  const [ratingTarget,setRatingTarget]=useState(null);
+  const [suggForm,setSuggForm]=useState(EMPTY_SUGG);
+  const [suggToConvert,setSuggToConvert]=useState(null);
+  const [restFilter,setRestFilter]=useState({search:"",k1:"",k2:"",author:""});
+  const [suggFilter,setSuggFilter]=useState({search:"",k1:"",k2:""});
+  const [selected,setSelected]=useState(null);
+  const [suggSelected,setSuggSelected]=useState(null);
+  const [editingId,setEditingId]=useState(null);
+  const [errors,setErrors]=useState({});
+  const [suggErrors,setSuggErrors]=useState({});
+  const [saving,setSaving]=useState(false);
+  const [toast,setToast]=useState("");
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
 
-            {!isAuthor && !hasRated && (
-              <button onClick={()=>onRate(r)}
-                style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.btn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
-                ⭐ Eigene Wertung abgeben
-              </button>
-            )}
+  useEffect(()=>{
+    let ref;try{ref=db.ref("restaurants");ref.on("value",snap=>{const d=snap.val();setRestaurants(d?Object.values(d):[]);setLoading(false);},()=>setLoading(false));}catch{setLoading(false);}
+    const tm=setTimeout(()=>setLoading(false),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
+  },[]);
+  useEffect(()=>{
+    let ref;try{ref=db.ref("suggestions");ref.on("value",snap=>{const d=snap.val();setSuggestions(d?Object.values(d):[]);});}catch{}
+    return()=>ref&&ref.off();
+  },[]);
 
-            {!isAuthor && hasRated && (
-              <button onClick={()=>onRate(r)}
-                style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>
-                ✏️ Meine Wertung bearbeiten
-              </button>
-            )}
+  const cities=[...new Set(restaurants.map(r=>r.city))].sort();
+  const cuisines=[...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
+  const allRaters=[...new Set(restaurants.flatMap(r=>Object.keys(normalizeRest(r).ratings||{})))].sort();
+  const filteredRest=restaurants.filter(r=>{
+    const norm=normalizeRest(r);const rc=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+    return(!restFilter.k1||r.city===restFilter.k1)&&(!restFilter.k2||rc.includes(restFilter.k2))&&(!restFilter.author||Object.keys(norm.ratings||{}).includes(restFilter.author))&&(!restFilter.search||r.name.toLowerCase().includes(restFilter.search.toLowerCase()));
+  }).sort((a,b)=>getAvgRest(b).avg-getAvgRest(a).avg);
+  const suggCities=[...new Set(suggestions.map(s=>s.city))].sort();
+  const suggCuisines=[...new Set(suggestions.flatMap(s=>Array.isArray(s.cuisines)?s.cuisines:[]))].sort();
+  const filteredSugg=suggestions.filter(s=>{
+    const c=Array.isArray(s.cuisines)?s.cuisines:[];
+    return(!suggFilter.k1||s.city===suggFilter.k1)&&(!suggFilter.k2||c.includes(suggFilter.k2))&&(!suggFilter.search||s.name.toLowerCase().includes(suggFilter.search.toLowerCase()));
+  });
+
+  const valRest=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.city.trim())e.city="Bitte Stadt eingeben";if(!form.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
+  const valSugg=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.city.trim())e.city="Bitte Stadt eingeben";if(!suggForm.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
+
+  const handleAdd=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("restaurants/"+id).set({id,name:form.name,city:form.city,cuisines:form.cuisines,author:user,ratings:{[user]:{food:form.food,service:form.service,price:form.price,stars:form.stars}}});if(suggToConvert){await db.ref("suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_REST);setErrors({});setView("list");setSection("list");showToast("✅ Gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=r=>{const norm=normalizeRest(r);const my=norm.ratings?.[user]||EMPTY_RATING;setForm({name:r.name,city:r.city,cuisines:Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]),food:my.food,service:my.service,price:my.price,stars:my.stars});setEditingId(r.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city,cuisines:form.cuisines});await db.ref(`restaurants/${editingId}/ratings/${user}`).set({food:form.food,service:form.service,price:form.price,stars:form.stars});setForm(EMPTY_REST);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDelete=async id=>{try{await db.ref("restaurants/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const startRate=r=>{const norm=normalizeRest(r);setRatingForm(norm.ratings?.[user]||EMPTY_RATING);setRatingTarget(r);setSelected(null);setView("rate");};
+  const handleSaveRating=async()=>{setSaving(true);try{await db.ref(`restaurants/${ratingTarget.id}/ratings/${user}`).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAddSugg=async()=>{const e=valSugg();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("suggestions/"+id).set({id,name:suggForm.name,city:suggForm.city,cuisines:suggForm.cuisines,author:user});setSuggForm(EMPTY_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDeleteSugg=async id=>{try{await db.ref("suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const handleConvertSugg=s=>{setForm({name:s.name,city:s.city,cuisines:Array.isArray(s.cuisines)?s.cuisines:[],food:5,service:5,price:3,stars:7});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
+  const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
+  const navTo=s=>{setSection(s);setView(s);setSelected(null);setSuggSelected(null);};
+  const navAdd=()=>{if(activeSection==="list"){setForm(EMPTY_REST);setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm(EMPTY_SUGG);setSuggErrors({});setView("add-suggestion");}};
+  const navActive=view==="list"||view==="rate";
+  const suggActive=view==="suggestions";
+  const addActive=view==="add"||view==="add-suggestion";
+  const navColor=t.restNavActive;
+  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.restBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1};
+
+  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
+
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:92,transition:"background 0.3s"}}>
+      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}
+        title="🍽️ Restaurantführer der Montagabendgesellschaft"
+        subtitle={`${restaurants.length} bewertet · ${suggestions.length} Vorschlag${suggestions.length!==1?"e":""}`}
+        headerBg={t.restHeaderBg} headerSub={t.restHeaderSub}/>
+
+      {view==="list"&&(
+        <div style={{padding:"20px 16px"}}>
+          <FilterBar filter={restFilter} setFilter={setRestFilter} col1={cities} col2={cuisines} col1Label="Alle Städte" col2Label="Alle Küchen" extra={[["author","Alle Bewerter",allRaters]]} filterOn={t.restFilterOn} filterOnColor={t.restFilterOnColor} t={t}/>
+          {filteredRest.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{restaurants.length===0?"Noch keine Restaurants":"Keine Treffer"}</div></div>):filteredRest.map(r=><RestCard key={r.id} r={r} onClick={()=>setSelected(r)} t={t}/>)}
+        </div>
+      )}
+      {view==="suggestions"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Restaurant Vorschläge</div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:16}}>Restaurants die ihr noch besuchen möchtet</div>
+          <FilterBar filter={suggFilter} setFilter={setSuggFilter} col1={suggCities} col2={suggCuisines} col1Label="Alle Städte" col2Label="Alle Küchen" filterOn={t.restFilterOn} filterOnColor={t.restFilterOnColor} t={t}/>
+          {filteredSugg.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{suggestions.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredSugg.map(s=><RestSuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
+        </div>
+      )}
+      {view==="add"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
+            <button onClick={()=>{setView(editingId?"list":activeSection);setForm(EMPTY_REST);setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
+            <div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Restaurant hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.restSuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
+          </div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label><input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="r-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="r-cities">{cities.map(c=><option key={c} value={c}/>)}</datalist>{errors.city&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.city}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Art der Küche <span style={{fontWeight:400,color:form.cuisines.length===3?"#e05030":t.tick}}>({form.cuisines.length}/3)</span></label><TypeChips value={form.cuisines} onChange={v=>{f("cuisines",v);setErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{errors.cuisines&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisines}</div>}</div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+            <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
+            <Slider label="🍽️ Essen" value={form.food} min={0} max={10} onChange={v=>f("food",v)} color="#2e7d52" t={t}/>
+            <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t}/>
+            <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.restAccent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t}/>
+            <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t}/>
+          </div>
+          <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Restaurant speichern"}</button>
+        </div>
+      )}
+      {view==="add-suggestion"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm(EMPTY_SUGG);setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>Vorschlag hinzufügen</div></div>
+          <div style={{background:t.suggBadgeBg,borderRadius:12,padding:"10px 14px",marginBottom:20,border:`1px solid ${t.suggBorder}`}}><div style={{fontSize:12,color:t.restSuggAccent}}>💡 Noch nicht besucht — als Idee für den nächsten Abend.</div></div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label><input value={suggForm.city} onChange={e=>{sf("city",e.target.value);setSuggErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="rs-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="rs-cities">{[...new Set([...cities,...suggCities])].map(c=><option key={c} value={c}/>)}</datalist>{suggErrors.city&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.city}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Art der Küche <span style={{fontWeight:400,color:suggForm.cuisines.length===3?"#e05030":t.tick}}>({suggForm.cuisines.length}/3)</span></label><TypeChips value={suggForm.cuisines} onChange={v=>{sf("cuisines",v);setSuggErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{suggErrors.cuisines&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.cuisines}</div>}</div>
+          <button onClick={handleAddSugg} disabled={saving} style={btn}>{saving?"Speichert…":"Vorschlag speichern"}</button>
+        </div>
+      )}
+      {view==="rate"&&ratingTarget&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>{ratingTarget.name} · {ratingTarget.city}</div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+            <Slider label="🍽️ Essen" value={ratingForm.food} min={0} max={10} onChange={v=>rf("food",v)} color="#2e7d52" t={t}/>
+            <Slider label="🤝 Service" value={ratingForm.service} min={0} max={10} onChange={v=>rf("service",v)} color="#1a5f8c" t={t}/>
+            <Slider label="💶 Preis" value={ratingForm.price} min={1} max={5} onChange={v=>rf("price",v)} color={t.restAccent} display={`${"€".repeat(ratingForm.price)} ${PRICE_LABELS[ratingForm.price]}`} t={t}/>
+            <Slider label="⭐ Sterne" value={ratingForm.stars} min={0} max={10} onChange={v=>rf("stars",v)} color="#e8a020" t={t}/>
+          </div>
+          <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
+        </div>
+      )}
+
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
+        {[["list",navActive,()=>navTo("list"),"📋","Restaurant\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Restaurant\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
+          <button key={key} onClick={onClick} style={{flex:1,padding:"11px 4px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <span style={{fontSize:20}}>{icon}</span>
+            <span style={{fontSize:9,color:active?navColor:t.navInactive,fontWeight:active?700:400,textAlign:"center",lineHeight:1.25,whiteSpace:"pre-line"}}>{label}</span>
+            {active&&<div style={{width:20,height:2,background:navColor,borderRadius:1,marginTop:1}}/>}
+          </button>
+        ))}
+      </div>
+      <RestModal r={selected} user={user} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} onRate={startRate} t={t}/>
+      <RestSuggModal s={suggSelected} user={user} onClose={()=>setSuggSelected(null)} onDelete={handleDeleteSugg} onConvert={handleConvertSugg} t={t}/>
+      <Toast msg={toast} color={t.restToast} textColor={t.toastColor}/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WHISKY FÜHRER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function WhiskyCard({w,onClick,t}){
+  const avg=getAvgWhisky(w);
+  const types=Array.isArray(w.types)?w.types:[];
+  const raters=Object.keys(w.ratings||{});
+  return(
+    <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1,minWidth:0,paddingRight:8}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{w.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.whiskyAccent}}>{avg.stars}</div>
+          <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
+        </div>
+      </div>
+      <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <Badge value={avg.rauchigkeit} color="#505868"/><span style={{fontSize:11,color:t.sub}}>Rauchigkeit</span>
+        <Badge value={avg.feuchtigkeit} color="#2060a0"/><span style={{fontSize:11,color:t.sub}}>Feuchtigkeit</span>
+      </div>
+      {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
+    </div>
+  );
+}
+
+function WhiskySuggCard({s,onClick,t}){
+  const types=Array.isArray(s.types)?s.types:[];
+  return(
+    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>🥃 {s.distillery}{types.length?" · "+types.join(" & "):""}</div>
+        </div>
+        <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:t.whiskySuggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
+      </div>
+      <div style={{textAlign:"right",marginTop:8}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>vorgeschlagen von {s.author}</span></div>
+    </div>
+  );
+}
+
+function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
+  if(!w)return null;
+  const avg=getAvgWhisky(w);
+  const types=Array.isArray(w.types)?w.types:[];
+  const ratings=Object.entries(w.ratings||{});
+  const isAuthor=user===w.author;const hasRated=!!w.ratings?.[user];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{w.name}</div>
+        <div style={{color:t.sub,fontSize:13,marginTop:4}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
+        <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
+        <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:t.sub}}>⭐ Gesamtgeschmack</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:t.whiskyAccent}}>{avg.stars}/10</div>
+          <div style={{fontSize:10,color:t.tick}}>Durchschnitt aus {avg.count} Wertung{avg.count!==1?"en":""}</div>
+        </div>
+        <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:11,color:t.sub}}>💨 Rauchigkeit</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#505868"}}>{avg.rauchigkeit}/10</div>
+          </div>
+          <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:11,color:t.sub}}>💧 Feuchtigkeit</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#2060a0"}}>{avg.feuchtigkeit}/10</div>
           </div>
         </div>
-      );
-    }
-
-    // ── App ───────────────────────────────────────────────────────────────────
-
-    function App() {
-      const [user, setUser]               = useState(() => localStorage.getItem("rmg_user") || null);
-      const [dark, setDark]               = useState(false);
-      const t = dark ? DARK : LIGHT;
-
-      const [view, setView]               = useState("list"); // "list" | "add" | "rate"
-      const [form, setForm]               = useState(EMPTY_FORM);
-      const [ratingForm, setRatingForm]   = useState(EMPTY_RATING);
-      const [ratingTarget, setRatingTarget] = useState(null);
-
-      const [restaurants, setRestaurants] = useState([]);
-      const [loading, setLoading]         = useState(true);
-      const [filter, setFilter]           = useState({ city:"", cuisine:"", author:"", search:"" });
-      const [selected, setSelected]       = useState(null);
-      const [errors, setErrors]           = useState({});
-      const [toast, setToast]             = useState("");
-      const [saving, setSaving]           = useState(false);
-      const [editingId, setEditingId]     = useState(null);
-
-      const showToast = msg => { setToast(msg); setTimeout(()=>setToast(""),2500); };
-
-      useEffect(()=>{
-        if (!user) return;
-        let ref;
-        try {
-          ref = db.ref("restaurants");
-          ref.on("value", snap => {
-            const data = snap.val();
-            setRestaurants(data ? Object.values(data) : []);
-            setLoading(false);
-          }, ()=>setLoading(false));
-        } catch { setLoading(false); }
-        const timeout = setTimeout(()=>setLoading(false), 5000);
-        return ()=>{ ref && ref.off(); clearTimeout(timeout); };
-      }, [user]);
-
-      if (!user) return <LoginScreen onLogin={setUser} />;
-
-      // ── Abgeleitete Listen ──────────────────────────────────────────────────
-
-      const cities      = [...new Set(restaurants.map(r=>r.city))].sort();
-      const cuisineList = [...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
-      const allRaters   = [...new Set(restaurants.flatMap(r=>{
-        const norm = normalizeRestaurant(r);
-        return Object.keys(norm.ratings || {});
-      }))].sort();
-
-      const filtered = restaurants
-        .filter(r => {
-          const norm = normalizeRestaurant(r);
-          const rc   = Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []);
-          const matchCity    = !filter.city    || r.city === filter.city;
-          const matchCuisine = !filter.cuisine || rc.includes(filter.cuisine);
-          const matchAuthor  = !filter.author  || Object.keys(norm.ratings||{}).includes(filter.author);
-          const matchSearch  = !filter.search  || r.name.toLowerCase().includes(filter.search.toLowerCase());
-          return matchCity && matchCuisine && matchAuthor && matchSearch;
-        })
-        .sort((a,b) => getAvgRating(b).avg - getAvgRating(a).avg);
-
-      // ── Handlers ───────────────────────────────────────────────────────────
-
-      const validate = () => {
-        const e = {};
-        if (!form.name.trim())    e.name    = "Bitte Name eingeben";
-        if (!form.city.trim())    e.city    = "Bitte Stadt eingeben";
-        if (!form.cuisines.length) e.cuisines = "Bitte mindestens eine Küche auswählen";
-        return e;
-      };
-
-      const handleAdd = async () => {
-        const e = validate();
-        if (Object.keys(e).length) { setErrors(e); return; }
-        setSaving(true);
-        try {
-          const id = Date.now().toString();
-          await db.ref("restaurants/"+id).set({
-            id, name:form.name, city:form.city, cuisines:form.cuisines, author:user,
-            ratings: {
-              [user]: { food:form.food, service:form.service, price:form.price, stars:form.stars }
-            }
-          });
-          setForm(EMPTY_FORM); setErrors({}); setView("list");
-          showToast("✅ Restaurant gespeichert!");
-        } catch { showToast("⚠️ Fehler beim Speichern"); }
-        setSaving(false);
-      };
-
-      const handleEdit = (r) => {
-        const norm = normalizeRestaurant(r);
-        const myRating = norm.ratings?.[user] || EMPTY_RATING;
-        setForm({
-          name: r.name, city: r.city,
-          cuisines: Array.isArray(r.cuisines) ? r.cuisines : (r.cuisine ? [r.cuisine] : []),
-          food: myRating.food, service: myRating.service,
-          price: myRating.price, stars: myRating.stars,
-        });
-        setEditingId(r.id);
-        setSelected(null);
-        setView("add");
-      };
-
-      const handleUpdate = async () => {
-        const e = validate();
-        if (Object.keys(e).length) { setErrors(e); return; }
-        setSaving(true);
-        try {
-          await db.ref("restaurants/"+editingId).update({
-            name: form.name, city: form.city, cuisines: form.cuisines,
-          });
-          await db.ref(`restaurants/${editingId}/ratings/${user}`).set({
-            food:form.food, service:form.service, price:form.price, stars:form.stars
-          });
-          setForm(EMPTY_FORM); setEditingId(null); setErrors({}); setView("list");
-          showToast("✅ Restaurant aktualisiert!");
-        } catch { showToast("⚠️ Fehler beim Speichern"); }
-        setSaving(false);
-      };
-
-      const handleDelete = async id => {
-        try {
-          await db.ref("restaurants/"+id).remove();
-          setSelected(null);
-          showToast("🗑️ Eintrag gelöscht");
-        } catch { showToast("⚠️ Fehler beim Löschen"); }
-      };
-
-      // Eigene Wertung auf fremdes Restaurant abgeben (oder eigene bearbeiten)
-      const startRate = (r) => {
-        const norm = normalizeRestaurant(r);
-        const myRating = norm.ratings?.[user];
-        setRatingForm(myRating || EMPTY_RATING);
-        setRatingTarget(r);
-        setSelected(null);
-        setView("rate");
-      };
-
-      const handleSaveRating = async () => {
-        setSaving(true);
-        try {
-          await db.ref(`restaurants/${ratingTarget.id}/ratings/${user}`).set(ratingForm);
-          setView("list"); setRatingTarget(null);
-          showToast("✅ Wertung gespeichert!");
-        } catch { showToast("⚠️ Fehler beim Speichern"); }
-        setSaving(false);
-      };
-
-      const f = (k,v) => setForm(p=>({...p,[k]:v}));
-      const rf = (k,v) => setRatingForm(p=>({...p,[k]:v}));
-
-      // ── Loading ────────────────────────────────────────────────────────────
-
-      if (loading) return (
-        <div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
-          <div style={{fontSize:48}}>🍽️</div>
-          <div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade Restaurants…</div>
+        <div style={{marginTop:20}}>
+          <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
+          {ratings.map(([author,rating])=>(
+            <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.whiskyAccent}}>★ {rating.stars}/10</span></div>
+              <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}>
+                <span>💨 {rating.rauchigkeit}/10</span><span>💧 {rating.feuchtigkeit}/10</span>
+              </div>
+              {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
+            </div>
+          ))}
         </div>
-      );
+        {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <button onClick={()=>onEdit(w)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
+          <button onClick={()=>onDelete(w.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
+        </div>}
+        {!isAuthor&&!hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>🥃 Eigene Wertung abgeben</button>}
+        {!isAuthor&&hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
+      </div>
+    </div>
+  );
+}
 
-      // ── Render ─────────────────────────────────────────────────────────────
-
-      return (
-        <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:80,transition:"background 0.3s"}}>
-
-          {/* Header */}
-          <div style={{background:t.headerBg,padding:"24px 20px 20px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,lineHeight:1.3}}>
-                🍽️ Restaurantführer der<br/>Montagabendgesellschaft
-              </div>
-              <div style={{fontSize:12,color:t.headerSub,marginTop:6}}>
-                {restaurants.length} Restaurant{restaurants.length!==1?"s":""} bewertet
-              </div>
-            </div>
-            <button onClick={()=>setDark(d=>!d)}
-              style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontSize:16,marginTop:2,flexShrink:0}}>
-              {dark?"☀️":"🌙"}
-            </button>
-          </div>
-          <div style={{background:"rgba(0,0,0,0.25)",padding:"8px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 Angemeldet als <strong style={{color:"white"}}>{user}</strong></span>
-            <button onClick={()=>{localStorage.removeItem("rmg_user");setUser(null);}}
-              style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
-              Abmelden
-            </button>
-          </div>
-
-          {/* ── Listen-Ansicht ─────────────────────────────────────────────── */}
-          {view==="list" && (
-            <div style={{padding:"20px 16px"}}>
-
-              {/* Suchfeld */}
-              <div style={{position:"relative",marginBottom:12}}>
-                <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,pointerEvents:"none"}}>🔍</span>
-                <input
-                  value={filter.search}
-                  onChange={e=>setFilter(p=>({...p,search:e.target.value}))}
-                  placeholder="Restaurant suchen…"
-                  style={{width:"100%",padding:"11px 14px 11px 40px",borderRadius:12,fontSize:14,border:`1.5px solid ${filter.search?t.filterOn:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
-                {filter.search && (
-                  <button onClick={()=>setFilter(p=>({...p,search:""}))}
-                    style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,cursor:"pointer",color:t.sub}}>×</button>
-                )}
-              </div>
-
-              {/* Filter-Dropdowns */}
-              {(cities.length>0||cuisineList.length>0||allRaters.length>0) && (
-                <div style={{display:"flex",gap:8,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
-                  {[
-                    ["city",    "Alle Städte",   cities],
-                    ["cuisine", "Alle Küchen",   cuisineList],
-                    ["author",  "Alle Bewerter", allRaters],
-                  ].map(([key,placeholder,opts])=>(
-                    <select key={key} value={filter[key]} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
-                      style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${filter[key]?t.filterOn:t.filterBorder}`,background:filter[key]?t.filterOn:t.filterBg,color:filter[key]?t.filterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
-                      <option value="">{placeholder}</option>
-                      {opts.map(o=><option key={o}>{o}</option>)}
-                    </select>
-                  ))}
-                </div>
-              )}
-
-              {/* Ergebnis-Anzahl bei aktivem Filter */}
-              {(filter.city||filter.cuisine||filter.author||filter.search) && (
-                <div style={{fontSize:12,color:t.sub,marginBottom:12}}>
-                  {filtered.length} Ergebnis{filtered.length!==1?"se":""} gefunden
-                  <button onClick={()=>setFilter({city:"",cuisine:"",author:"",search:""})}
-                    style={{marginLeft:10,fontSize:11,color:t.accent,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
-                    Filter zurücksetzen
-                  </button>
-                </div>
-              )}
-
-              {filtered.length===0 ? (
-                <div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}>
-                  <div style={{fontSize:48}}>🍽️</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>
-                    {restaurants.length===0 ? "Noch keine Restaurants" : "Keine Treffer"}
-                  </div>
-                  <div style={{fontSize:13,marginTop:8}}>
-                    {restaurants.length===0 ? "Füge dein erstes Restaurant hinzu!" : "Versuche andere Filter."}
-                  </div>
-                </div>
-              ) : filtered.map(r=>(
-                <Card key={r.id} r={r} onClick={()=>setSelected(r)} t={t} />
-              ))}
-            </div>
-          )}
-
-          {/* ── Hinzufügen / Bearbeiten ─────────────────────────────────────── */}
-          {view==="add" && (
-            <div style={{padding:"20px 16px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-                <button onClick={()=>{setView("list");setForm(EMPTY_FORM);setEditingId(null);setErrors({});}}
-                  style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>
-                  {editingId ? "Restaurant bearbeiten" : "Restaurant hinzufügen"}
-                </div>
-              </div>
-
-              <div style={{marginBottom:16}}>
-                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Restaurant Name</label>
-                <input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco"
-                  style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
-                {errors.name && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}
-              </div>
-
-              <div style={{marginBottom:16}}>
-                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label>
-                <input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München"
-                  list="city-suggestions"
-                  style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}} />
-                <datalist id="city-suggestions">{cities.map(c=><option key={c} value={c} />)}</datalist>
-                {errors.city && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.city}</div>}
-              </div>
-
-              <div style={{marginBottom:20}}>
-                <label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>
-                  Art der Küche
-                  <span style={{marginLeft:8,fontWeight:400,color:form.cuisines.length===3?"#e05030":t.tick}}>
-                    ({form.cuisines.length}/3 gewählt)
-                  </span>
-                </label>
-                <div style={{fontSize:11,color:t.tick,marginBottom:8}}>Bis zu 3 Küchen auswählbar</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {CUISINES.map(c=>{
-                    const sel      = form.cuisines.includes(c);
-                    const disabled = !sel && form.cuisines.length >= 3;
-                    return (
-                      <button key={c} onClick={()=>{
-                        if(disabled) return;
-                        const next = sel ? form.cuisines.filter(x=>x!==c) : [...form.cuisines, c];
-                        f("cuisines",next); setErrors(p=>({...p,cuisines:""}));
-                      }}
-                        style={{padding:"7px 14px",borderRadius:20,fontSize:13,cursor:disabled?"not-allowed":"pointer",
-                          border:`1.5px solid ${sel?t.chipOn:t.chipBorder}`,
-                          background:sel?t.chipOn:t.chipBg,
-                          color:sel?t.chipOnColor:disabled?"#ccc":t.chipColor,
-                          opacity:disabled?0.4:1,transition:"all 0.15s"}}>
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-                {errors.cuisines && <div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisines}</div>}
-              </div>
-
-              <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-                <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>
-                  {editingId ? "Deine Wertung" : "Deine Bewertung"}
-                </div>
-                <Slider label="🍽️ Essen"   value={form.food}    min={0} max={10} onChange={v=>f("food",v)}    color="#2e7d52" t={t} />
-                <Slider label="🤝 Service"  value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t} />
-                <Slider label="💶 Preis"   value={form.price}   min={1} max={5}  onChange={v=>f("price",v)}   color={t.accent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t} />
-                <Slider label="⭐ Sterne"  value={form.stars}   min={0} max={10} onChange={v=>f("stars",v)}   color="#e8a020" t={t} />
-              </div>
-
-              <button onClick={editingId ? handleUpdate : handleAdd} disabled={saving}
-                style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
-                {saving ? "Wird gespeichert…" : editingId ? "Änderungen speichern" : "Restaurant speichern"}
-              </button>
-            </div>
-          )}
-
-          {/* ── Wertung abgeben ─────────────────────────────────────────────── */}
-          {view==="rate" && ratingTarget && (
-            <div style={{padding:"20px 16px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
-                <button onClick={()=>{setView("list");setRatingTarget(null);}}
-                  style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>
-                  Wertung abgeben
-                </div>
-              </div>
-              <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>
-                {ratingTarget.name} · {ratingTarget.city}
-              </div>
-
-              <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-                <Slider label="🍽️ Essen"   value={ratingForm.food}    min={0} max={10} onChange={v=>rf("food",v)}    color="#2e7d52" t={t} />
-                <Slider label="🤝 Service"  value={ratingForm.service} min={0} max={10} onChange={v=>rf("service",v)} color="#1a5f8c" t={t} />
-                <Slider label="💶 Preis"   value={ratingForm.price}   min={1} max={5}  onChange={v=>rf("price",v)}   color={t.accent} display={`${"€".repeat(ratingForm.price)} ${PRICE_LABELS[ratingForm.price]}`} t={t} />
-                <Slider label="⭐ Sterne"  value={ratingForm.stars}   min={0} max={10} onChange={v=>rf("stars",v)}   color="#e8a020" t={t} />
-              </div>
-
-              <button onClick={handleSaveRating} disabled={saving}
-                style={{width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.btn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1}}>
-                {saving ? "Wird gespeichert…" : "Wertung speichern"}
-              </button>
-            </div>
-          )}
-
-          {/* Bottom Nav */}
-          <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
-            {[["list","📋","Übersicht"],["add","➕","Hinzufügen"]].map(([v,icon,lbl])=>(
-              <button key={v} onClick={()=>{ setView(v); if(v==="add"){setForm(EMPTY_FORM);setEditingId(null);setErrors({});} }}
-                style={{flex:1,padding:"14px 0 18px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <span style={{fontSize:22}}>{icon}</span>
-                <span style={{fontSize:11,color:view===v?t.navActive:t.navInactive,fontWeight:view===v?700:400}}>{lbl}</span>
-                {view===v && <div style={{width:20,height:2,background:t.navActive,borderRadius:1}} />}
-              </button>
-            ))}
-          </div>
-
-          <Modal r={selected} user={user} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} onRate={startRate} t={t} />
-          <Toast msg={toast} t={t} />
+function WhiskySuggModal({s,user,onClose,onDelete,onConvert,t}){
+  if(!s)return null;
+  const types=Array.isArray(s.types)?s.types:[];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
+          <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.whiskySuggAccent,fontWeight:600}}>💡 Vorschlag</span>
         </div>
-      );
-    }
+        <div style={{color:t.sub,fontSize:13}}>🥃 {s.distillery}{types.length?" · "+types.join(" & "):""}</div>
+        <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
+          <div style={{fontSize:13,color:t.sub}}>Noch nicht probiert.</div>
+          <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
+        </div>
+        <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>🥃 Jetzt bewerten & übernehmen</button>
+        {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+      </div>
+    </div>
+  );
+}
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
-  </script>
+function WhiskyRatingFields({form,setF,t}){
+  return(
+    <>
+      <Slider label="⭐ Gesamtgeschmack" value={form.stars} min={0} max={10} onChange={v=>setF("stars",v)} color={t.whiskyAccent} t={t}/>
+      <Slider label="💨 Rauchigkeit" value={form.rauchigkeit} min={0} max={10} onChange={v=>setF("rauchigkeit",v)} color="#505868" t={t}/>
+      <Slider label="💧 Feuchtigkeit" value={form.feuchtigkeit} min={0} max={10} onChange={v=>setF("feuchtigkeit",v)} color="#2060a0" t={t}/>
+      <div>
+        <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+        <textarea value={form.kommentar} onChange={e=>setF("kommentar",e.target.value)}
+          placeholder="Geschmacksnotizen, Aromen, erster Eindruck…"
+          style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
+      </div>
+    </>
+  );
+}
+
+function WhiskyApp({user,dark,setDark,mode,setMode,t}){
+  const [view,setView]=useState("list");
+  const [activeSection,setSection]=useState("list");
+  const [whiskies,setWhiskies]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState(EMPTY_WHISKY);
+  const [ratingForm,setRatingForm]=useState(EMPTY_W_RATING);
+  const [ratingTarget,setRatingTarget]=useState(null);
+  const [suggForm,setSuggForm]=useState(EMPTY_W_SUGG);
+  const [suggToConvert,setSuggToConvert]=useState(null);
+  const [wFilter,setWFilter]=useState({search:"",k1:"",k2:"",author:""});
+  const [sFilter,setSFilter]=useState({search:"",k1:"",k2:""});
+  const [selected,setSelected]=useState(null);
+  const [suggSelected,setSuggSelected]=useState(null);
+  const [editingId,setEditingId]=useState(null);
+  const [errors,setErrors]=useState({});
+  const [suggErrors,setSuggErrors]=useState({});
+  const [saving,setSaving]=useState(false);
+  const [toast,setToast]=useState("");
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+
+  useEffect(()=>{
+    let ref;try{ref=db.ref("whiskies");ref.on("value",snap=>{const d=snap.val();setWhiskies(d?Object.values(d):[]);setLoading(false);},()=>setLoading(false));}catch{setLoading(false);}
+    const tm=setTimeout(()=>setLoading(false),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
+  },[]);
+  useEffect(()=>{
+    let ref;try{ref=db.ref("whisky_suggestions");ref.on("value",snap=>{const d=snap.val();setSuggestions(d?Object.values(d):[]);});}catch{}
+    return()=>ref&&ref.off();
+  },[]);
+
+  const distilleries=[...new Set(whiskies.map(w=>w.distillery).filter(Boolean))].sort();
+  const allTypes=[...new Set(whiskies.flatMap(w=>Array.isArray(w.types)?w.types:[]))].sort();
+  const allRaters=[...new Set(whiskies.flatMap(w=>Object.keys(w.ratings||{})))].sort();
+  const filteredW=whiskies.filter(w=>{
+    return(!wFilter.k1||w.distillery===wFilter.k1)&&(!wFilter.k2||(Array.isArray(w.types)&&w.types.includes(wFilter.k2)))&&(!wFilter.author||Object.keys(w.ratings||{}).includes(wFilter.author))&&(!wFilter.search||w.name.toLowerCase().includes(wFilter.search.toLowerCase()));
+  }).sort((a,b)=>getAvgWhisky(b).stars-getAvgWhisky(a).stars);
+  const suggDist=[...new Set(suggestions.map(s=>s.distillery).filter(Boolean))].sort();
+  const suggTypes=[...new Set(suggestions.flatMap(s=>Array.isArray(s.types)?s.types:[]))].sort();
+  const filteredS=suggestions.filter(s=>(!sFilter.k1||s.distillery===sFilter.k1)&&(!sFilter.k2||(Array.isArray(s.types)&&s.types.includes(sFilter.k2)))&&(!sFilter.search||s.name.toLowerCase().includes(sFilter.search.toLowerCase())));
+
+  const valW=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!form.types.length)e.types="Bitte Typ auswählen";return e;};
+  const valS=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!suggForm.types.length)e.types="Bitte Typ auswählen";return e;};
+
+  const handleAdd=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whiskies/"+id).set({id,name:form.name,distillery:form.distillery,types:form.types,author:user,ratings:{[user]:{stars:form.stars,rauchigkeit:form.rauchigkeit,feuchtigkeit:form.feuchtigkeit,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("whisky_suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_WHISKY);setErrors({});setView("list");setSection("list");showToast("✅ Whisky gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=w=>{const my=w.ratings?.[user]||EMPTY_W_RATING;setForm({name:w.name,distillery:w.distillery,types:Array.isArray(w.types)?w.types:[],stars:my.stars,rauchigkeit:my.rauchigkeit,feuchtigkeit:my.feuchtigkeit,kommentar:my.kommentar||""});setEditingId(w.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("whiskies/"+editingId).update({name:form.name,distillery:form.distillery,types:form.types});await db.ref(`whiskies/${editingId}/ratings/${user}`).set({stars:form.stars,rauchigkeit:form.rauchigkeit,feuchtigkeit:form.feuchtigkeit,kommentar:form.kommentar});setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDelete=async id=>{try{await db.ref("whiskies/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const startRate=w=>{setRatingForm(w.ratings?.[user]||EMPTY_W_RATING);setRatingTarget(w);setSelected(null);setView("rate");};
+  const handleSaveRating=async()=>{setSaving(true);try{await db.ref(`whiskies/${ratingTarget.id}/ratings/${user}`).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAddSugg=async()=>{const e=valS();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whisky_suggestions/"+id).set({id,name:suggForm.name,distillery:suggForm.distillery,types:suggForm.types,author:user});setSuggForm(EMPTY_W_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDeleteSugg=async id=>{try{await db.ref("whisky_suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const handleConvertSugg=s=>{setForm({name:s.name,distillery:s.distillery,types:Array.isArray(s.types)?s.types:[],stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
+  const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
+  const navTo=s=>{setSection(s);setView(s);setSelected(null);setSuggSelected(null);};
+  const navAdd=()=>{if(activeSection==="list"){setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm(EMPTY_W_SUGG);setSuggErrors({});setView("add-suggestion");}};
+  const navActive=view==="list"||view==="rate";
+  const suggActive=view==="suggestions";
+  const addActive=view==="add"||view==="add-suggestion";
+  const navColor=t.whiskyNavActive;
+  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.whiskyBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1};
+
+  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
+
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:92,transition:"background 0.3s"}}>
+      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}
+        title="🥃 Whisky Führer der Montagabendgesellschaft"
+        subtitle={`${whiskies.length} bewertet · ${suggestions.length} Vorschlag${suggestions.length!==1?"e":""}`}
+        headerBg={t.whiskyHeaderBg} headerSub={t.whiskyHeaderSub}/>
+
+      {view==="list"&&(
+        <div style={{padding:"20px 16px"}}>
+          <FilterBar filter={wFilter} setFilter={setWFilter} col1={distilleries} col2={allTypes} col1Label="Alle Destillerien" col2Label="Alle Typen" extra={[["author","Alle Bewerter",allRaters]]} filterOn={t.whiskyFilterOn} filterOnColor={t.whiskyFilterOnColor} t={t}/>
+          {filteredW.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{whiskies.length===0?"Noch keine Whiskys":"Keine Treffer"}</div></div>):filteredW.map(w=><WhiskyCard key={w.id} w={w} onClick={()=>setSelected(w)} t={t}/>)}
+        </div>
+      )}
+      {view==="suggestions"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Whisky Vorschläge</div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:16}}>Whiskys die ihr noch probieren möchtet</div>
+          <FilterBar filter={sFilter} setFilter={setSFilter} col1={suggDist} col2={suggTypes} col1Label="Alle Destillerien" col2Label="Alle Typen" filterOn={t.whiskyFilterOn} filterOnColor={t.whiskyFilterOnColor} t={t}/>
+          {filteredS.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{suggestions.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredS.map(s=><WhiskySuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
+        </div>
+      )}
+      {view==="add"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
+            <button onClick={()=>{setView(editingId?"list":activeSection);setForm(EMPTY_WHISKY);setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
+            <div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Whisky hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.whiskySuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
+          </div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Whisky Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Destillerie / Herkunft</label><input value={form.distillery} onChange={e=>{f("distillery",e.target.value);setErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="w-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.distillery?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="w-dist">{distilleries.map(d=><option key={d} value={d}/>)}</datalist>{errors.distillery&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.distillery}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Whisky Typ <span style={{fontWeight:400,color:form.types.length===3?"#e05030":t.tick}}>({form.types.length}/3)</span></label><TypeChips value={form.types} onChange={v=>{f("types",v);setErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{errors.types&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.types}</div>}</div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+            <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
+            <WhiskyRatingFields form={form} setF={f} t={t}/>
+          </div>
+          <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Whisky speichern"}</button>
+        </div>
+      )}
+      {view==="add-suggestion"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm(EMPTY_W_SUGG);setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>Whisky Vorschlag</div></div>
+          <div style={{background:t.suggBadgeBg,borderRadius:12,padding:"10px 14px",marginBottom:20,border:`1px solid ${t.suggBorder}`}}><div style={{fontSize:12,color:t.whiskySuggAccent}}>💡 Noch nicht probiert — als Idee für den nächsten Abend.</div></div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Whisky Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Destillerie / Herkunft</label><input value={suggForm.distillery} onChange={e=>{sf("distillery",e.target.value);setSuggErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="ws-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.distillery?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="ws-dist">{[...new Set([...distilleries,...suggDist])].map(d=><option key={d} value={d}/>)}</datalist>{suggErrors.distillery&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.distillery}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Whisky Typ <span style={{fontWeight:400,color:suggForm.types.length===3?"#e05030":t.tick}}>({suggForm.types.length}/3)</span></label><TypeChips value={suggForm.types} onChange={v=>{sf("types",v);setSuggErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{suggErrors.types&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.types}</div>}</div>
+          <button onClick={handleAddSugg} disabled={saving} style={btn}>{saving?"Speichert…":"Vorschlag speichern"}</button>
+        </div>
+      )}
+      {view==="rate"&&ratingTarget&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>{ratingTarget.name} · {ratingTarget.distillery}</div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+            <WhiskyRatingFields form={ratingForm} setF={rf} t={t}/>
+          </div>
+          <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
+        </div>
+      )}
+
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
+        {[["list",navActive,()=>navTo("list"),"📋","Whisky\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Whisky\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
+          <button key={key} onClick={onClick} style={{flex:1,padding:"11px 4px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <span style={{fontSize:20}}>{icon}</span>
+            <span style={{fontSize:9,color:active?navColor:t.navInactive,fontWeight:active?700:400,textAlign:"center",lineHeight:1.25,whiteSpace:"pre-line"}}>{label}</span>
+            {active&&<div style={{width:20,height:2,background:navColor,borderRadius:1,marginTop:1}}/>}
+          </button>
+        ))}
+      </div>
+      <WhiskyModal w={selected} user={user} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} onRate={startRate} t={t}/>
+      <WhiskySuggModal s={suggSelected} user={user} onClose={()=>setSuggSelected(null)} onDelete={handleDeleteSugg} onConvert={handleConvertSugg} t={t}/>
+      <Toast msg={toast} color={t.whiskyToast} textColor={t.toastColor}/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOP-LEVEL APP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function App(){
+  const [user,setUser]=useState(()=>localStorage.getItem("rmg_user")||null);
+  const [dark,setDark]=useState(false);
+  const [mode,setMode]=useState("restaurant");
+  const t=dark?DARK:LIGHT;
+  if(!user)return <LoginScreen onLogin={setUser}/>;
+  if(mode==="whisky")return <WhiskyApp user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}/>;
+  return <RestaurantApp user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
