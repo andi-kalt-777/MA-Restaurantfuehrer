@@ -197,7 +197,7 @@ function FilterBar({filter,setFilter,col1,col2,col1Label,col2Label,extra=[],filt
       </div>
       {(col1.length>0||col2.length>0||extra.length>0)&&(
         <div style={{display:"flex",gap:8,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
-          {[[filter.k1||"k1",col1Label||"Filter 1",col1],...(col2.length>0?[[filter.k2||"k2",col2Label||"Filter 2",col2]]:[]),...extra].map(([key,ph,opts])=>(
+          {[["k1",col1Label||"Filter 1",col1],...(col2.length>0?[["k2",col2Label||"Filter 2",col2]]:[]),...extra].map(([key,ph,opts])=>(
             <select key={key} value={filter[key]||""} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
               style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${filter[key]?filterOn:t.filterBorder}`,background:filter[key]?filterOn:t.filterBg,color:filter[key]?filterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
               <option value="">{ph}</option>
