@@ -62,12 +62,12 @@ function getAvgRest(r){
 }
 function getAvgWhisky(w){
   const vals=Object.values(w.ratings||{});
-  if(!vals.length)return{stars:0,rauchigkeit:0,feuchtigkeit:0,count:0};
+  if(!vals.length)return{stars:0,rauchigkeit:0,fruchtigkeit:0,count:0};
   const n=vals.length;
   return{
     stars:+(vals.reduce((s,x)=>s+x.stars,0)/n).toFixed(1),
     rauchigkeit:+(vals.reduce((s,x)=>s+x.rauchigkeit,0)/n).toFixed(1),
-    feuchtigkeit:+(vals.reduce((s,x)=>s+x.feuchtigkeit,0)/n).toFixed(1),
+    fruchtigkeit:+(vals.reduce((s,x)=>s+x.fruchtigkeit,0)/n).toFixed(1),
     count:n
   };
 }
@@ -80,8 +80,8 @@ const PRICE_LABELS=["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"]
 const EMPTY_REST={city:"",name:"",cuisines:[],service:5,food:5,price:3,stars:7};
 const EMPTY_RATING={service:5,food:5,price:3,stars:7};
 const EMPTY_SUGG={city:"",name:"",cuisines:[]};
-const EMPTY_WHISKY={name:"",distillery:"",types:[],stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""};
-const EMPTY_W_RATING={stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""};
+const EMPTY_WHISKY={name:"",distillery:"",types:[],stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
+const EMPTY_W_RATING={stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
 const EMPTY_W_SUGG={name:"",distillery:"",types:[]};
 
 // ── Themes ─────────────────────────────────────────────────────────────────
@@ -569,7 +569,7 @@ function WhiskyCard({w,onClick,t}){
       <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
       <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <Badge value={avg.rauchigkeit} color="#505868"/><span style={{fontSize:11,color:t.sub}}>Rauchigkeit</span>
-        <Badge value={avg.feuchtigkeit} color="#2060a0"/><span style={{fontSize:11,color:t.sub}}>Feuchtigkeit</span>
+        <Badge value={avg.fruchtigkeit} color="#2060a0"/><span style={{fontSize:11,color:t.sub}}>Fruchtigkeit</span>
       </div>
       {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
     </div>
@@ -617,8 +617,8 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#505868"}}>{avg.rauchigkeit}/10</div>
           </div>
           <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-            <div style={{fontSize:11,color:t.sub}}>💧 Feuchtigkeit</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#2060a0"}}>{avg.feuchtigkeit}/10</div>
+            <div style={{fontSize:11,color:t.sub}}>💧 Fruchtigkeit</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#2060a0"}}>{avg.fruchtigkeit}/10</div>
           </div>
         </div>
         <div style={{marginTop:20}}>
@@ -627,7 +627,7 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
             <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.whiskyAccent}}>★ {rating.stars}/10</span></div>
               <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}>
-                <span>💨 {rating.rauchigkeit}/10</span><span>💧 {rating.feuchtigkeit}/10</span>
+                <span>💨 {rating.rauchigkeit}/10</span><span>💧 {rating.fruchtigkeit}/10</span>
               </div>
               {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
             </div>
@@ -672,7 +672,7 @@ function WhiskyRatingFields({form,setF,t}){
     <>
       <Slider label="⭐ Gesamtgeschmack" value={form.stars} min={0} max={10} onChange={v=>setF("stars",v)} color={t.whiskyAccent} t={t}/>
       <Slider label="💨 Rauchigkeit" value={form.rauchigkeit} min={0} max={10} onChange={v=>setF("rauchigkeit",v)} color="#505868" t={t}/>
-      <Slider label="💧 Feuchtigkeit" value={form.feuchtigkeit} min={0} max={10} onChange={v=>setF("feuchtigkeit",v)} color="#2060a0" t={t}/>
+      <Slider label="💧 Fruchtigkeit" value={form.fruchtigkeit} min={0} max={10} onChange={v=>setF("fruchtigkeit",v)} color="#2060a0" t={t}/>
       <div>
         <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
         <textarea value={form.kommentar} onChange={e=>setF("kommentar",e.target.value)}
@@ -727,15 +727,15 @@ function WhiskyApp({user,dark,setDark,mode,setMode,t}){
   const valW=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!form.types.length)e.types="Bitte Typ auswählen";return e;};
   const valS=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!suggForm.types.length)e.types="Bitte Typ auswählen";return e;};
 
-  const handleAdd=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whiskies/"+id).set({id,name:form.name,distillery:form.distillery,types:form.types,author:user,ratings:{[user]:{stars:form.stars,rauchigkeit:form.rauchigkeit,feuchtigkeit:form.feuchtigkeit,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("whisky_suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_WHISKY);setErrors({});setView("list");setSection("list");showToast("✅ Whisky gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
-  const handleEdit=w=>{const my=w.ratings?.[user]||EMPTY_W_RATING;setForm({name:w.name,distillery:w.distillery,types:Array.isArray(w.types)?w.types:[],stars:my.stars,rauchigkeit:my.rauchigkeit,feuchtigkeit:my.feuchtigkeit,kommentar:my.kommentar||""});setEditingId(w.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
-  const handleUpdate=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("whiskies/"+editingId).update({name:form.name,distillery:form.distillery,types:form.types});await db.ref(`whiskies/${editingId}/ratings/${user}`).set({stars:form.stars,rauchigkeit:form.rauchigkeit,feuchtigkeit:form.feuchtigkeit,kommentar:form.kommentar});setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAdd=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whiskies/"+id).set({id,name:form.name,distillery:form.distillery,types:form.types,author:user,ratings:{[user]:{stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("whisky_suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_WHISKY);setErrors({});setView("list");setSection("list");showToast("✅ Whisky gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=w=>{const my=w.ratings?.[user]||EMPTY_W_RATING;setForm({name:w.name,distillery:w.distillery,types:Array.isArray(w.types)?w.types:[],stars:my.stars,rauchigkeit:my.rauchigkeit,fruchtigkeit:my.fruchtigkeit,kommentar:my.kommentar||""});setEditingId(w.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("whiskies/"+editingId).update({name:form.name,distillery:form.distillery,types:form.types});await db.ref(`whiskies/${editingId}/ratings/${user}`).set({stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar});setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDelete=async id=>{try{await db.ref("whiskies/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
   const startRate=w=>{setRatingForm(w.ratings?.[user]||EMPTY_W_RATING);setRatingTarget(w);setSelected(null);setView("rate");};
   const handleSaveRating=async()=>{setSaving(true);try{await db.ref(`whiskies/${ratingTarget.id}/ratings/${user}`).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleAddSugg=async()=>{const e=valS();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whisky_suggestions/"+id).set({id,name:suggForm.name,distillery:suggForm.distillery,types:suggForm.types,author:user});setSuggForm(EMPTY_W_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDeleteSugg=async id=>{try{await db.ref("whisky_suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
-  const handleConvertSugg=s=>{setForm({name:s.name,distillery:s.distillery,types:Array.isArray(s.types)?s.types:[],stars:7,rauchigkeit:5,feuchtigkeit:5,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
+  const handleConvertSugg=s=>{setForm({name:s.name,distillery:s.distillery,types:Array.isArray(s.types)?s.types:[],stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
   const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
