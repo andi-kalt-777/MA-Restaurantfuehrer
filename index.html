@@ -47,7 +47,13 @@ const PASSWORD="Polonia2025";
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function normalizeRest(r){
-  if(r.ratings)return r;
+  if(r.ratings){
+    // Mischzustand: ratings-Objekt existiert, aber Autor-Wertung liegt noch als Top-Level-Felder vor
+    if(r.author && r.food!==undefined && !r.ratings[r.author]){
+      return{...r,ratings:{[r.author]:{food:r.food??5,service:r.service??5,price:r.price??3,stars:r.stars??7},...r.ratings}};
+    }
+    return r;
+  }
   return{...r,ratings:r.author?{[r.author]:{food:r.food??5,service:r.service??5,price:r.price??3,stars:r.stars??7}}:{}};
 }
 function getAvgRest(r){
@@ -448,7 +454,16 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
   const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city,cuisines:form.cuisines});await db.ref(`restaurants/${editingId}/ratings/${user}`).set({food:form.food,service:form.service,price:form.price,stars:form.stars});setForm(EMPTY_REST);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDelete=async id=>{try{await db.ref("restaurants/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
   const startRate=r=>{const norm=normalizeRest(r);setRatingForm(norm.ratings?.[user]||EMPTY_RATING);setRatingTarget(r);setSelected(null);setView("rate");};
-  const handleSaveRating=async()=>{setSaving(true);try{await db.ref(`restaurants/${ratingTarget.id}/ratings/${user}`).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleSaveRating=async()=>{setSaving(true);try{
+    const updates={};
+    updates[`restaurants/${ratingTarget.id}/ratings/${user}`]=ratingForm;
+    // Mischzustand-Migration: falls Autor-Wertung noch als Top-Level-Felder in Firebase liegt
+    if(ratingTarget.author && ratingTarget.food!==undefined && !ratingTarget.ratings?.[ratingTarget.author]){
+      updates[`restaurants/${ratingTarget.id}/ratings/${ratingTarget.author}`]={food:ratingTarget.food??5,service:ratingTarget.service??5,price:ratingTarget.price??3,stars:ratingTarget.stars??7};
+    }
+    await db.ref().update(updates);
+    setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");
+  }catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleAddSugg=async()=>{const e=valSugg();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("suggestions/"+id).set({id,name:suggForm.name,city:suggForm.city,cuisines:suggForm.cuisines,author:user});setSuggForm(EMPTY_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDeleteSugg=async id=>{try{await db.ref("suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
   const handleConvertSugg=s=>{setForm({name:s.name,city:s.city,cuisines:Array.isArray(s.cuisines)?s.cuisines:[],food:5,service:5,price:3,stars:7});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
