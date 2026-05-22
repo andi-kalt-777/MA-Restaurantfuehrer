@@ -83,8 +83,8 @@ function getAvgWhisky(w){
 const CUISINES=["Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch","Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch","Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch","Polnisch","Sushi","Burger","Fusion","Eisdiele","Kaffee & Kuchen","Frühstück","Branche","Bar","Andere"];
 const WHISKY_TYPES=["Single Malt","Blended Malt","Blended Scotch","Bourbon","Rye Whiskey","Irish Whiskey","Japanese Whisky","Highlands","Speyside","Islay","Islands","Lowlands","Campbeltown","Amerikanisch","Kanadisch","Andere"];
 const PRICE_LABELS=["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
-const EMPTY_REST={city:"",name:"",cuisines:[],service:5,food:5,price:3,stars:7};
-const EMPTY_RATING={service:5,food:5,price:3,stars:7};
+const EMPTY_REST={city:"",name:"",cuisines:[],service:5,food:5,price:3,stars:7,kommentar:""};
+const EMPTY_RATING={service:5,food:5,price:3,stars:7,kommentar:""};
 const EMPTY_SUGG={city:"",name:"",cuisines:[]};
 const EMPTY_WHISKY={name:"",distillery:"",types:[],stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
 const EMPTY_W_RATING={stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
@@ -332,6 +332,42 @@ function RestSuggCard({s,onClick,t}){
   );
 }
 
+// ── SwipeableSheet: Wisch-nach-unten-Geste ────────────────────────────────
+function SwipeableSheet({onClose,t,children}){
+  const {useState:uS,useRef:uR}=React;
+  const [dragY,setDragY]=uS(0);
+  const startY=uR(null);
+  const sheetRef=uR(null);
+
+  const onTouchStart=e=>{
+    // Nur starten wenn am oberen Rand des Sheets (erste 60px)
+    const rect=sheetRef.current.getBoundingClientRect();
+    if(e.touches[0].clientY-rect.top>60)return;
+    startY.current=e.touches[0].clientY;
+  };
+  const onTouchMove=e=>{
+    if(startY.current===null)return;
+    const delta=e.touches[0].clientY-startY.current;
+    if(delta>0)setDragY(delta);
+  };
+  const onTouchEnd=()=>{
+    if(dragY>80)onClose();
+    setDragY(0);
+    startY.current=null;
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${Math.max(0,0.65-(dragY/300)*0.65)})`,zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div ref={sheetRef} onClick={e=>e.stopPropagation()}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",transform:`translateY(${dragY}px)`,transition:dragY===0?"transform 0.3s":"none",willChange:"transform"}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px",cursor:"grab"}}/>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
   if(!r)return null;
   const norm=normalizeRest(r);const avg=getAvgRest(r);
@@ -339,9 +375,7 @@ function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
   const ratings=Object.entries(norm.ratings||{});
   const isAuthor=user===r.author;const hasRated=!!norm.ratings?.[user];
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+    <SwipeableSheet onClose={onClose} t={t}>
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
         <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
         <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
@@ -364,6 +398,7 @@ function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
             <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
               <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span></div>
               <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}><span>🍽️ {rating.food}/10</span><span>🤝 {rating.service}/10</span><span>{"€".repeat(rating.price)}</span></div>
+              {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
             </div>
           ))}
         </div>
@@ -373,8 +408,7 @@ function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
         </div>}
         {!isAuthor&&!hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>⭐ Eigene Wertung abgeben</button>}
         {!isAuthor&&hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
-      </div>
-    </div>
+    </SwipeableSheet>
   );
 }
 
@@ -432,14 +466,14 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
     return()=>ref&&ref.off();
   },[]);
 
-  const cities=[...new Set(restaurants.map(r=>r.city))].sort();
+  const cities=[...new Set(restaurants.map(r=>r.city?.trim()).filter(Boolean))].sort();
   const cuisines=[...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
   const allRaters=[...new Set(restaurants.flatMap(r=>Object.keys(normalizeRest(r).ratings||{})))].sort();
   const filteredRest=restaurants.filter(r=>{
     const norm=normalizeRest(r);const rc=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
     return(!restFilter.k1||r.city===restFilter.k1)&&(!restFilter.k2||rc.includes(restFilter.k2))&&(!restFilter.author||Object.keys(norm.ratings||{}).includes(restFilter.author))&&(!restFilter.search||r.name.toLowerCase().includes(restFilter.search.toLowerCase()));
   }).sort((a,b)=>getAvgRest(b).avg-getAvgRest(a).avg);
-  const suggCities=[...new Set(suggestions.map(s=>s.city))].sort();
+  const suggCities=[...new Set(suggestions.map(s=>s.city?.trim()).filter(Boolean))].sort();
   const suggCuisines=[...new Set(suggestions.flatMap(s=>Array.isArray(s.cuisines)?s.cuisines:[]))].sort();
   const filteredSugg=suggestions.filter(s=>{
     const c=Array.isArray(s.cuisines)?s.cuisines:[];
@@ -449,14 +483,14 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
   const valRest=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.city.trim())e.city="Bitte Stadt eingeben";if(!form.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
   const valSugg=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.city.trim())e.city="Bitte Stadt eingeben";if(!suggForm.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
 
-  const handleAdd=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("restaurants/"+id).set({id,name:form.name,city:form.city,cuisines:form.cuisines,author:user,ratings:{[user]:{food:form.food,service:form.service,price:form.price,stars:form.stars}}});if(suggToConvert){await db.ref("suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_REST);setErrors({});setView("list");setSection("list");showToast("✅ Gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
-  const handleEdit=r=>{const norm=normalizeRest(r);const my=norm.ratings?.[user]||EMPTY_RATING;setForm({name:r.name,city:r.city,cuisines:Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]),food:my.food,service:my.service,price:my.price,stars:my.stars});setEditingId(r.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
-  const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city,cuisines:form.cuisines});await db.ref(`restaurants/${editingId}/ratings/${user}`).set({food:form.food,service:form.service,price:form.price,stars:form.stars});setForm(EMPTY_REST);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAdd=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("restaurants/"+id).set({id,name:form.name,city:form.city,cuisines:form.cuisines,author:user,ratings:{[user]:{food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_REST);setErrors({});setView("list");setSection("list");showToast("✅ Gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=r=>{const norm=normalizeRest(r);const my=norm.ratings?.[user]||EMPTY_RATING;setForm({name:r.name,city:r.city,cuisines:Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]),food:my.food,service:my.service,price:my.price,stars:my.stars,kommentar:my.kommentar||""});setEditingId(r.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city,cuisines:form.cuisines});await db.ref(`restaurants/${editingId}/ratings/${user}`).set({food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar});setForm(EMPTY_REST);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDelete=async id=>{try{await db.ref("restaurants/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
   const startRate=r=>{const norm=normalizeRest(r);setRatingForm(norm.ratings?.[user]||EMPTY_RATING);setRatingTarget(r);setSelected(null);setView("rate");};
   const handleSaveRating=async()=>{setSaving(true);try{
     const updates={};
-    updates[`restaurants/${ratingTarget.id}/ratings/${user}`]=ratingForm;
+    updates[`restaurants/${ratingTarget.id}/ratings/${user}`]=ratingForm;  // ratingForm already includes kommentar
     // Mischzustand-Migration: falls Autor-Wertung noch als Top-Level-Felder in Firebase liegt
     if(ratingTarget.author && ratingTarget.food!==undefined && !ratingTarget.ratings?.[ratingTarget.author]){
       updates[`restaurants/${ratingTarget.id}/ratings/${ratingTarget.author}`]={food:ratingTarget.food??5,service:ratingTarget.service??5,price:ratingTarget.price??3,stars:ratingTarget.stars??7};
@@ -516,6 +550,12 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
             <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t}/>
             <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.restAccent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t}/>
             <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t}/>
+            <div>
+              <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+              <textarea value={form.kommentar} onChange={e=>f("kommentar",e.target.value)}
+                placeholder="Notizen, Empfehlungen, besondere Gerichte…"
+                style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
+            </div>
           </div>
           <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Restaurant speichern"}</button>
         </div>
@@ -539,6 +579,12 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
             <Slider label="🤝 Service" value={ratingForm.service} min={0} max={10} onChange={v=>rf("service",v)} color="#1a5f8c" t={t}/>
             <Slider label="💶 Preis" value={ratingForm.price} min={1} max={5} onChange={v=>rf("price",v)} color={t.restAccent} display={`${"€".repeat(ratingForm.price)} ${PRICE_LABELS[ratingForm.price]}`} t={t}/>
             <Slider label="⭐ Sterne" value={ratingForm.stars} min={0} max={10} onChange={v=>rf("stars",v)} color="#e8a020" t={t}/>
+            <div>
+              <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+              <textarea value={ratingForm.kommentar||""} onChange={e=>rf("kommentar",e.target.value)}
+                placeholder="Notizen, Empfehlungen, besondere Gerichte…"
+                style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
+            </div>
           </div>
           <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
         </div>
@@ -615,9 +661,7 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
   const ratings=Object.entries(w.ratings||{});
   const isAuthor=user===w.author;const hasRated=!!w.ratings?.[user];
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
+    <SwipeableSheet onClose={onClose} t={t}>
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{w.name}</div>
         <div style={{color:t.sub,fontSize:13,marginTop:4}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
         <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
@@ -654,8 +698,7 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
         </div>}
         {!isAuthor&&!hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>🥃 Eigene Wertung abgeben</button>}
         {!isAuthor&&hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
-      </div>
-    </div>
+    </SwipeableSheet>
   );
 }
 
