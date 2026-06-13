@@ -1,32 +1,32 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-  <title>Montagabendgesellschaft</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet"/>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#f7f3ee;font-family:system-ui,sans-serif}
-    input,select,button,textarea{font-family:inherit}
-    input::placeholder,textarea::placeholder{color:#b0a090}
-    select option{background:white;color:#2c1f14}
-    ::-webkit-scrollbar{width:4px;height:4px}
-    ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:#c0a880;border-radius:2px}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>Führer App</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f5f4f2;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+input,select,button,textarea{font-family:inherit}
+input::placeholder,textarea::placeholder{color:#b3ada4}
+select option{background:white;color:#1b1713}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#c9c4bc;border-radius:2px}
+</style>
 </head>
 <body>
 <div id="root"></div>
 
 <script>
-  // ⚠️ FIREBASE KONFIGURATION EINFÜGEN
-  const firebaseConfig={
+// FIREBASE KONFIGURATION EINFUEGEN
+const firebaseConfig={
   apiKey: "AIzaSyALr6jetmhTYj9XIGZQ7aBs_gxAFLnt4x4",
   authDomain: "montagabendrestaurants.firebaseapp.com",
   databaseURL: "https://montagabendrestaurants-default-rtdb.europe-west1.firebasedatabase.app",
@@ -35,29 +35,37 @@
   messagingSenderId: "977029677061",
   appId: "1:977029677061:web:d2b7b3d94820f710e1dc6c",
   measurementId: "G-FG9LH4LK9H"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db=firebase.database();
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database();
 </script>
 
 <script type="text/babel">
 const {useState,useEffect}=React;
-const PASSWORD="Polonia2025";
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Auth Helpers
+async function sha256(str){
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));
+  return[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+const hashPw=(user,pw)=>sha256(user.toLowerCase()+":"+pw);
+const validUsername=n=>/^[A-Za-z0-9 _\-]{2,20}$/.test(n);
 
+// Daten-Helpers
 function normalizeRest(r){
   if(r.ratings){
-    // Mischzustand: ratings-Objekt existiert, aber Autor-Wertung liegt noch als Top-Level-Felder vor
-    if(r.author && r.food!==undefined && !r.ratings[r.author]){
+    if(r.author&&r.food!==undefined&&!r.ratings[r.author]){
       return{...r,ratings:{[r.author]:{food:r.food??5,service:r.service??5,price:r.price??3,stars:r.stars??7},...r.ratings}};
     }
     return r;
   }
   return{...r,ratings:r.author?{[r.author]:{food:r.food??5,service:r.service??5,price:r.price??3,stars:r.stars??7}}:{}};
 }
+function restrictToMembers(item,members){
+  return{...item,ratings:Object.fromEntries(Object.entries(item.ratings||{}).filter(([k])=>members.includes(k)))};
+}
 function getAvgRest(r){
-  const vals=Object.values(normalizeRest(r).ratings||{});
+  const vals=Object.values(r.ratings||{});
   if(!vals.length)return{food:0,service:0,price:0,stars:0,avg:0,count:0};
   const n=vals.length;
   const food=+(vals.reduce((s,x)=>s+x.food,0)/n).toFixed(1);
@@ -70,18 +78,19 @@ function getAvgWhisky(w){
   const vals=Object.values(w.ratings||{});
   if(!vals.length)return{stars:0,rauchigkeit:0,fruchtigkeit:0,count:0};
   const n=vals.length;
-  return{
-    stars:+(vals.reduce((s,x)=>s+x.stars,0)/n).toFixed(1),
-    rauchigkeit:+(vals.reduce((s,x)=>s+x.rauchigkeit,0)/n).toFixed(1),
-    fruchtigkeit:+(vals.reduce((s,x)=>s+x.fruchtigkeit,0)/n).toFixed(1),
-    count:n
-  };
+  return{stars:+(vals.reduce((s,x)=>s+x.stars,0)/n).toFixed(1),rauchigkeit:+(vals.reduce((s,x)=>s+x.rauchigkeit,0)/n).toFixed(1),fruchtigkeit:+(vals.reduce((s,x)=>s+x.fruchtigkeit,0)/n).toFixed(1),count:n};
+}
+function getAvgMedia(x){
+  const vals=Object.values(x.ratings||{});
+  if(!vals.length)return{stars:0,handlung:0,spannung:0,count:0};
+  const n=vals.length;
+  return{stars:+(vals.reduce((s,v)=>s+v.stars,0)/n).toFixed(1),handlung:+(vals.reduce((s,v)=>s+v.handlung,0)/n).toFixed(1),spannung:+(vals.reduce((s,v)=>s+v.spannung,0)/n).toFixed(1),count:n};
 }
 
-// ── Konstanten ─────────────────────────────────────────────────────────────
-
+// Konstanten
 const CUISINES=["Italienisch","Japanisch","Chinesisch","Indisch","Mexikanisch","Französisch","Griechisch","Türkisch","Deutsch","Amerikanisch","Thai","Vietnamesisch","Spanisch","Libanesisch","Koreanisch","Polnisch","Sushi","Burger","Fusion","Eisdiele","Kaffee & Kuchen","Frühstück","Branche","Bar","Andere"];
 const WHISKY_TYPES=["Single Malt","Blended Malt","Blended Scotch","Bourbon","Rye Whiskey","Irish Whiskey","Japanese Whisky","Highlands","Speyside","Islay","Islands","Lowlands","Campbeltown","Amerikanisch","Kanadisch","Andere"];
+const MEDIA_GENRES=["Action","Abenteuer","Animation","Biografie","Dokumentation","Drama","Fantasy","Horror","Komödie","Krimi","Musical","Romance","Science-Fiction","Thriller","Western","Andere"];
 const PRICE_LABELS=["","Sehr günstig","Günstig","Mittel","Teuer","Sehr teuer"];
 const EMPTY_REST={city:"",name:"",cuisines:[],service:5,food:5,price:3,stars:7,kommentar:""};
 const EMPTY_RATING={service:5,food:5,price:3,stars:7,kommentar:""};
@@ -89,70 +98,118 @@ const EMPTY_SUGG={city:"",name:"",cuisines:[]};
 const EMPTY_WHISKY={name:"",distillery:"",types:[],stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
 const EMPTY_W_RATING={stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""};
 const EMPTY_W_SUGG={name:"",distillery:"",types:[]};
+const EMPTY_MEDIA={name:"",field1:"",genres:[],stars:7,handlung:5,spannung:5,kommentar:""};
+const EMPTY_MEDIA_RATING={stars:7,handlung:5,spannung:5,kommentar:""};
+const EMPTY_MEDIA_SUGG={name:"",field1:"",genres:[]};
 
-// ── Themes ─────────────────────────────────────────────────────────────────
+const CATEGORY_DEFS={
+  restaurant:{icon:"🍽️",label:"Restaurants"},
+  whisky:{icon:"🥃",label:"Whiskys"},
+  film:{icon:"🎬",label:"Filme"},
+  serie:{icon:"📺",label:"Serien"},
+};
 
+const FILM_CONFIG={
+  fbBase:"movies",fbSugg:"movie_suggestions",icon:"🎬",label:"Film Führer",
+  field1Label:"Regisseur",field1Placeholder:"z.B. Christopher Nolan",field1Key:"director",
+  field1FilterLabel:"Alle Regisseure",typeFilterLabel:"Alle Genres",genreOptions:MEDIA_GENRES,
+  crit1Label:"📖 Handlung",crit2Label:"🎭 Spannung",crit1Short:"Handlung",crit2Short:"Spannung",
+  namePlaceholder:"z.B. Inception",saveToast:"✅ Film gespeichert!",
+  emptyIcon:"🎬",emptyText:"Noch keine Filme",emptySuggText:"Noch keine Vorschläge",
+  addTitle:"Film hinzufügen",addSuggTitle:"Film Vorschlag",suggListTitle:"Film Vorschläge",listLabel:"Film",
+  suggHint:"💡 Noch nicht gesehen — als Idee für den nächsten Filmabend.",
+  light:{headerBg:"#1a0e12",headerSub:"#b08490",accent:"#a8364e",navActive:"#7e2a3c",btn:"#7e2a3c",btnColor:"#ffffff",chipOn:"#7e2a3c",chipOnColor:"#ffffff",filterOn:"#7e2a3c",filterOnColor:"#ffffff",toast:"#7e2a3c",toastColor:"#ffffff",suggAccent:"#7e2a3c"},
+  dark:{headerBg:"#120a0c",headerSub:"#8f6470",accent:"#d96a82",navActive:"#d96a82",btn:"#d96a82",btnColor:"#111110",chipOn:"#d96a82",chipOnColor:"#111110",filterOn:"#d96a82",filterOnColor:"#111110",toast:"#d96a82",toastColor:"#111110",suggAccent:"#d96a82"},
+};
+const SERIE_CONFIG={
+  fbBase:"series",fbSugg:"serie_suggestions",icon:"📺",label:"Serien Führer",
+  field1Label:"Plattform / Sender",field1Placeholder:"z.B. Netflix, HBO, ARD",field1Key:"platform",
+  field1FilterLabel:"Alle Plattformen",typeFilterLabel:"Alle Genres",genreOptions:MEDIA_GENRES,
+  crit1Label:"📖 Handlung",crit2Label:"🎭 Spannung",crit1Short:"Handlung",crit2Short:"Spannung",
+  namePlaceholder:"z.B. Breaking Bad",saveToast:"✅ Serie gespeichert!",
+  emptyIcon:"📺",emptyText:"Noch keine Serien",emptySuggText:"Noch keine Vorschläge",
+  addTitle:"Serie hinzufügen",addSuggTitle:"Serien Vorschlag",suggListTitle:"Serien Vorschläge",listLabel:"Serien",
+  suggHint:"💡 Noch nicht gesehen — als Idee für den nächsten Serienabend.",
+  light:{headerBg:"#0d1320",headerSub:"#8094b8",accent:"#3a5a9e",navActive:"#2c4880",btn:"#2c4880",btnColor:"#ffffff",chipOn:"#2c4880",chipOnColor:"#ffffff",filterOn:"#2c4880",filterOnColor:"#ffffff",toast:"#2c4880",toastColor:"#ffffff",suggAccent:"#2c4880"},
+  dark:{headerBg:"#0a0e16",headerSub:"#5c7094",accent:"#7296d4",navActive:"#7296d4",btn:"#7296d4",btnColor:"#111110",chipOn:"#7296d4",chipOnColor:"#111110",filterOn:"#7296d4",filterOnColor:"#111110",toast:"#7296d4",toastColor:"#111110",suggAccent:"#7296d4"},
+};
+function customConfig(cat){
+  return{
+    fbBase:"custom_"+cat.id,fbSugg:"custom_"+cat.id+"_sugg",icon:cat.icon||"⭐",label:cat.name,
+    field1Label:cat.field1Label||"Herkunft / Marke",field1Placeholder:"z.B. "+(cat.field1Label||"Marke"),field1Key:"field1",
+    field1FilterLabel:"Alle",typeFilterLabel:"",genreOptions:null,
+    crit1Label:"◆ "+(cat.crit1Label||"Qualität"),crit2Label:"◆ "+(cat.crit2Label||"Preis-Leistung"),
+    crit1Short:cat.crit1Label||"Qualität",crit2Short:cat.crit2Label||"Preis-Leistung",
+    namePlaceholder:"Name",saveToast:"✅ Gespeichert!",
+    emptyIcon:cat.icon||"⭐",emptyText:"Noch keine Einträge",emptySuggText:"Noch keine Vorschläge",
+    addTitle:cat.name+" hinzufügen",addSuggTitle:cat.name+" Vorschlag",suggListTitle:cat.name+" Vorschläge",listLabel:cat.name,
+    suggHint:"💡 Noch nicht probiert — als Idee für den nächsten Abend.",
+    light:{headerBg:"#16161a",headerSub:"#9a96a8",accent:"#5c5878",navActive:"#46425e",btn:"#46425e",btnColor:"#ffffff",chipOn:"#46425e",chipOnColor:"#ffffff",filterOn:"#46425e",filterOnColor:"#ffffff",toast:"#46425e",toastColor:"#ffffff",suggAccent:"#46425e"},
+    dark:{headerBg:"#0e0e12",headerSub:"#6c6880",accent:"#9a94c0",navActive:"#9a94c0",btn:"#9a94c0",btnColor:"#111110",chipOn:"#9a94c0",chipOnColor:"#111110",filterOn:"#9a94c0",filterOnColor:"#111110",toast:"#9a94c0",toastColor:"#111110",suggAccent:"#9a94c0"},
+  };
+}
+
+// Themes
 const LIGHT={
-  bg:"#f7f3ee",card:"white",cardBorder:"#f0e8e0",cardShadow:"rgba(0,0,0,0.07)",
-  restHeaderBg:"linear-gradient(135deg,#2c1f14 0%,#4a2e1a 100%)",restHeaderSub:"#c4a882",
-  whiskyHeaderBg:"linear-gradient(135deg,#2d1900 0%,#6b3d08 100%)",whiskyHeaderSub:"#d4a840",
-  title:"#2c1f14",sub:"#9a8878",label:"#7a6650",sliderTrack:"#e8e0d6",
-  tick:"#b0a090",inputBg:"white",inputBorder:"#e0d8cc",inputColor:"#2c1f14",
-  innerCard:"#faf8f5",navBg:"white",navBorder:"#f0e8e0",navShadow:"rgba(0,0,0,0.08)",
-  restNavActive:"#4a2e1a",whiskyNavActive:"#6b3d08",navInactive:"#b0a090",
-  restAccent:"#c4622c",whiskyAccent:"#c87800",
-  chipBg:"white",chipBorder:"#e0d8cc",chipColor:"#4a2e1a",
-  restChipOn:"#4a2e1a",restChipOnColor:"white",
-  whiskyChipOn:"#6b3d08",whiskyChipOnColor:"white",
-  filterBg:"white",filterColor:"#4a2e1a",filterBorder:"#e0d8cc",
-  restFilterOn:"#4a2e1a",restFilterOnColor:"white",
-  whiskyFilterOn:"#6b3d08",whiskyFilterOnColor:"white",
-  restBtn:"linear-gradient(135deg,#2c1f14,#4a2e1a)",
-  whiskyBtn:"linear-gradient(135deg,#2d1900,#6b3d08)",btnColor:"white",
-  thumb:"white",starEmpty:"#e0d8cc",modal:"white",handle:"#e0d8cc",empty:"#b0a090",
-  restToast:"#2c1f14",whiskyToast:"#6b3d08",toastColor:"white",
-  ratingRow:"#f7f3ee",ratingBorder:"#f0e8e0",
-  secondaryBtn:"#f0e8e0",secondaryBtnColor:"#2c1f14",
-  suggCard:"#fffbf5",suggBorder:"#ede0c8",restSuggAccent:"#8a6030",whiskySuggAccent:"#8a5a00",suggBadgeBg:"#f5ead8",
-  modeSwitchBg:"rgba(255,255,255,0.12)",modeSwitchBorder:"rgba(255,255,255,0.25)",
+  bg:"#f5f4f2",card:"#ffffff",cardBorder:"#e9e7e3",cardShadow:"rgba(20,18,15,0.05)",
+  restHeaderBg:"#1b1713",restHeaderSub:"#a39584",
+  whiskyHeaderBg:"#1d1408",whiskyHeaderSub:"#b29259",
+  title:"#1b1713",sub:"#8a847c",label:"#5d574f",sliderTrack:"#ebe9e5",
+  tick:"#b3ada4",inputBg:"#ffffff",inputBorder:"#dfdcd6",inputColor:"#1b1713",
+  innerCard:"#f7f6f4",navBg:"#ffffff",navBorder:"#e9e7e3",navShadow:"rgba(20,18,15,0.06)",
+  restNavActive:"#1b1713",whiskyNavActive:"#7a5618",navInactive:"#b3ada4",
+  restAccent:"#b35a25",whiskyAccent:"#a87b1e",
+  chipBg:"#ffffff",chipBorder:"#dfdcd6",chipColor:"#44403a",
+  restChipOn:"#1b1713",restChipOnColor:"#ffffff",
+  whiskyChipOn:"#3d2c10",whiskyChipOnColor:"#ffffff",
+  filterBg:"#ffffff",filterColor:"#44403a",filterBorder:"#dfdcd6",
+  restFilterOn:"#1b1713",restFilterOnColor:"#ffffff",
+  whiskyFilterOn:"#3d2c10",whiskyFilterOnColor:"#ffffff",
+  restBtn:"#1b1713",whiskyBtn:"#3d2c10",btnColor:"#ffffff",
+  thumb:"#ffffff",starEmpty:"#e4e1dc",modal:"#ffffff",handle:"#dcd9d3",empty:"#b3ada4",
+  restToast:"#1b1713",whiskyToast:"#3d2c10",toastColor:"#ffffff",
+  ratingRow:"#f7f6f4",ratingBorder:"#eceae6",
+  secondaryBtn:"#efedea",secondaryBtnColor:"#1b1713",
+  suggCard:"#fbfaf8",suggBorder:"#e6e0d4",restSuggAccent:"#7a6240",whiskySuggAccent:"#7a5c20",suggBadgeBg:"#f1ede4",
+  modeSwitchBg:"rgba(255,255,255,0.10)",modeSwitchBorder:"rgba(255,255,255,0.20)",
+  danger:"#c03028",adminBadge:"#1b1713",adminBadgeColor:"#ffffff",memberBadge:"#efedea",memberBadgeColor:"#5d574f",
 };
 const DARK={
-  bg:"#0f0d0b",card:"#1c1612",cardBorder:"#2e2218",cardShadow:"rgba(0,0,0,0.5)",
-  restHeaderBg:"linear-gradient(135deg,#080604 0%,#161008 100%)",restHeaderSub:"#8a6a44",
-  whiskyHeaderBg:"linear-gradient(135deg,#100800 0%,#221200 100%)",whiskyHeaderSub:"#8a6010",
-  title:"#f0e8dc",sub:"#7a6858",label:"#9a8878",sliderTrack:"#2e2218",
-  tick:"#5a4838",inputBg:"#161210",inputBorder:"#2e2218",inputColor:"#f0e8dc",
-  innerCard:"#141210",navBg:"#0f0d0b",navBorder:"#2e2218",navShadow:"rgba(0,0,0,0.5)",
-  restNavActive:"#d4a870",whiskyNavActive:"#e8a020",navInactive:"#3a2a1a",
-  restAccent:"#e07840",whiskyAccent:"#e8a020",
-  chipBg:"#1c1612",chipBorder:"#2e2218",chipColor:"#b09070",
-  restChipOn:"#d4a870",restChipOnColor:"#0f0d0b",
-  whiskyChipOn:"#e8a020",whiskyChipOnColor:"#0f0d0b",
-  filterBg:"#1c1612",filterColor:"#b09070",filterBorder:"#2e2218",
-  restFilterOn:"#d4a870",restFilterOnColor:"#0f0d0b",
-  whiskyFilterOn:"#e8a020",whiskyFilterOnColor:"#0f0d0b",
-  restBtn:"linear-gradient(135deg,#c49050,#e07840)",
-  whiskyBtn:"linear-gradient(135deg,#b07010,#e8a020)",btnColor:"#0f0d0b",
-  thumb:"#0f0d0b",starEmpty:"#2a1e12",modal:"#1c1612",handle:"#2e2218",empty:"#3a2a1a",
-  restToast:"#d4a870",whiskyToast:"#e8a020",toastColor:"#0f0d0b",
-  ratingRow:"#141210",ratingBorder:"#2e2218",
-  secondaryBtn:"#2e2218",secondaryBtnColor:"#d4a870",
-  suggCard:"#161410",suggBorder:"#2a2010",restSuggAccent:"#c4a060",whiskySuggAccent:"#c4a020",suggBadgeBg:"#1e1a0e",
-  modeSwitchBg:"rgba(255,255,255,0.08)",modeSwitchBorder:"rgba(255,255,255,0.15)",
+  bg:"#111110",card:"#1b1a18",cardBorder:"#2b2926",cardShadow:"rgba(0,0,0,0.45)",
+  restHeaderBg:"#0c0b0a",restHeaderSub:"#8a7a64",
+  whiskyHeaderBg:"#100c05",whiskyHeaderSub:"#937a45",
+  title:"#f0eeea",sub:"#8c8780",label:"#a39d94",sliderTrack:"#2b2926",
+  tick:"#5d584f",inputBg:"#161513",inputBorder:"#2b2926",inputColor:"#f0eeea",
+  innerCard:"#161513",navBg:"#111110",navBorder:"#2b2926",navShadow:"rgba(0,0,0,0.45)",
+  restNavActive:"#e3ddd4",whiskyNavActive:"#d4a850",navInactive:"#494540",
+  restAccent:"#e0824a",whiskyAccent:"#d4a850",
+  chipBg:"#1b1a18",chipBorder:"#2b2926",chipColor:"#a8a299",
+  restChipOn:"#e3ddd4",restChipOnColor:"#111110",
+  whiskyChipOn:"#d4a850",whiskyChipOnColor:"#111110",
+  filterBg:"#1b1a18",filterColor:"#a8a299",filterBorder:"#2b2926",
+  restFilterOn:"#e3ddd4",restFilterOnColor:"#111110",
+  whiskyFilterOn:"#d4a850",whiskyFilterOnColor:"#111110",
+  restBtn:"#e3ddd4",whiskyBtn:"#d4a850",btnColor:"#111110",
+  thumb:"#111110",starEmpty:"#2e2b26",modal:"#1b1a18",handle:"#34322e",empty:"#494540",
+  restToast:"#e3ddd4",whiskyToast:"#d4a850",toastColor:"#111110",
+  ratingRow:"#161513",ratingBorder:"#2b2926",
+  secondaryBtn:"#2b2926",secondaryBtnColor:"#e3ddd4",
+  suggCard:"#171614",suggBorder:"#2b2820",restSuggAccent:"#b3a486",whiskySuggAccent:"#b3954e",suggBadgeBg:"#211f19",
+  modeSwitchBg:"rgba(255,255,255,0.07)",modeSwitchBorder:"rgba(255,255,255,0.14)",
+  danger:"#e05048",adminBadge:"#e3ddd4",adminBadgeColor:"#111110",memberBadge:"#2b2926",memberBadgeColor:"#a39d94",
 };
 
-// ── Shared UI-Komponenten ──────────────────────────────────────────────────
-
+// Shared UI
 function Slider({label,value,min,max,onChange,color,display,t}){
   const pct=((value-min)/(max-min))*100;
   return(
     <div style={{marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <span style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label}}>{label}</span>
-        <span style={{fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',serif",color}}>{display??value}</span>
+        <span style={{fontSize:13,fontFamily:"'Space Grotesk',sans-serif",color:t.label}}>{label}</span>
+        <span style={{fontSize:22,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",color}}>{display??value}</span>
       </div>
       <div style={{position:"relative",height:6,borderRadius:3,background:t.sliderTrack}}>
-        <div style={{position:"absolute",left:0,top:0,height:"100%",borderRadius:3,background:`linear-gradient(90deg,${color}88,${color})`,width:`${pct}%`,transition:"width 0.1s"}}/>
+        <div style={{position:"absolute",left:0,top:0,height:"100%",borderRadius:3,background:color,width:`${pct}%`,transition:"width 0.1s"}}/>
         <input type="range" min={min} max={max} value={value} onChange={e=>onChange(+e.target.value)}
           style={{position:"absolute",top:-8,left:0,width:"100%",height:22,opacity:0,cursor:"pointer",zIndex:2,margin:0}}/>
         <div style={{position:"absolute",top:"50%",transform:"translateY(-50%)",left:`calc(${pct}% - 10px)`,width:20,height:20,borderRadius:"50%",background:color,boxShadow:`0 2px 8px ${color}55`,border:`3px solid ${t.thumb}`,transition:"left 0.1s",pointerEvents:"none"}}/>
@@ -164,17 +221,16 @@ function Slider({label,value,min,max,onChange,color,display,t}){
     </div>
   );
 }
-
 function Stars({value,t}){
   return(<div style={{display:"flex",gap:2,flexWrap:"wrap"}}>{[...Array(10)].map((_,i)=><span key={i} style={{fontSize:14,color:i<Math.round(value)?"#e8a020":t.starEmpty}}>★</span>)}</div>);
 }
 function Badge({value,max=10,color}){
   const d=typeof value==="number"&&!Number.isInteger(value)?value.toFixed(1):value;
-  return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Playfair Display',serif"}}>{d}/{max}</span>;
+  return <span style={{display:"inline-block",padding:"2px 8px",borderRadius:12,background:`${color}22`,color,fontWeight:700,fontSize:12,fontFamily:"'Space Grotesk',sans-serif"}}>{d}/{max}</span>;
 }
 function Toast({msg,color,textColor}){
   if(!msg)return null;
-  return <div style={{position:"fixed",bottom:96,left:"50%",transform:"translateX(-50%)",background:color,color:textColor,padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>{msg}</div>;
+  return <div style={{position:"fixed",bottom:96,left:"50%",transform:"translateX(-50%)",background:color,color:textColor,padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:400,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>{msg}</div>;
 }
 function TypeChips({value,onChange,options,chipOn,chipOnColor,t}){
   return(
@@ -190,9 +246,11 @@ function TypeChips({value,onChange,options,chipOn,chipOnColor,t}){
     </>
   );
 }
-
 function FilterBar({filter,setFilter,col1,col2,col1Label,col2Label,extra=[],filterOn,filterOnColor,t}){
   const hasActive=Object.values(filter).some(Boolean);
+  const dropdowns=[["k1",col1Label||"Filter 1",col1]];
+  if(col2&&col2.length>0)dropdowns.push(["k2",col2Label||"Filter 2",col2]);
+  dropdowns.push(...extra);
   return(
     <>
       <div style={{position:"relative",marginBottom:12}}>
@@ -201,9 +259,9 @@ function FilterBar({filter,setFilter,col1,col2,col1Label,col2Label,extra=[],filt
           style={{width:"100%",padding:"11px 14px 11px 40px",borderRadius:12,fontSize:14,border:`1.5px solid ${filter.search?filterOn:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>
         {filter.search&&<button onClick={()=>setFilter(p=>({...p,search:""}))} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:16,cursor:"pointer",color:t.sub}}>×</button>}
       </div>
-      {(col1.length>0||col2.length>0||extra.length>0)&&(
+      {dropdowns.some(([,,opts])=>opts.length>0)&&(
         <div style={{display:"flex",gap:8,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
-          {[["k1",col1Label||"Filter 1",col1],...(col2.length>0?[["k2",col2Label||"Filter 2",col2]]:[]),...extra].map(([key,ph,opts])=>(
+          {dropdowns.map(([key,ph,opts])=>(
             <select key={key} value={filter[key]||""} onChange={e=>setFilter(p=>({...p,[key]:e.target.value}))}
               style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${filter[key]?filterOn:t.filterBorder}`,background:filter[key]?filterOn:t.filterBg,color:filter[key]?filterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
               <option value="">{ph}</option>
@@ -216,131 +274,12 @@ function FilterBar({filter,setFilter,col1,col2,col1Label,col2Label,extra=[],filt
     </>
   );
 }
-
-// ── Login ──────────────────────────────────────────────────────────────────
-
-function LoginScreen({onLogin}){
-  const [pw,setPw]=useState("");const [name,setName]=useState("");
-  const [step,setStep]=useState("pw");const [error,setError]=useState("");
-  const checkPw=()=>{if(pw===PASSWORD){setError("");setStep("name");}else setError("Falsches Passwort.");};
-  const doLogin=()=>{if(!name.trim()){setError("Bitte Name eingeben.");return;}localStorage.setItem("rmg_user",name.trim());onLogin(name.trim());};
-  return(
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
-        <div style={{fontSize:48,marginBottom:4}}>🍽️🥃</div>
-        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:19,color:"#2c1f14",lineHeight:1.3,marginBottom:6}}>Montagabendgesellschaft</div>
-        <div style={{fontSize:12,color:"#9a8878",marginBottom:28}}>Privater Bereich · Bitte anmelden</div>
-        {step==="pw"?(
-          <>
-            <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&checkPw()} placeholder="Passwort eingeben"
-              style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center",letterSpacing:2}}/>
-            {error&&<div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-            <button onClick={checkPw} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>Weiter →</button>
-          </>
-        ):(
-          <>
-            <div style={{fontSize:13,color:"#7a6650",marginBottom:12,fontFamily:"'Playfair Display',serif"}}>Wie heißt du?</div>
-            <input value={name} onChange={e=>{setName(e.target.value);setError("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="Dein Name"
-              style={{width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${error?"#e05030":"#e0d8cc"}`,outline:"none",color:"#2c1f14",marginBottom:error?8:16,textAlign:"center"}}/>
-            {error&&<div style={{color:"#e05030",fontSize:12,marginBottom:12}}>{error}</div>}
-            <button onClick={doLogin} style={{width:"100%",padding:14,borderRadius:12,background:"linear-gradient(135deg,#2c1f14,#4a2e1a)",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>Einloggen</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Shared Header ──────────────────────────────────────────────────────────
-
-function AppHeader({user,dark,setDark,mode,setMode,t,title,subtitle,headerBg,headerSub}){
-  const switchIcon=mode==="restaurant"?"🥃":"🍽️";
-  const switchTitle=mode==="restaurant"?"Whisky Führer":"Restaurant Führer";
-  return(
-    <>
-      <div style={{background:headerBg,padding:"20px 20px 16px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,lineHeight:1.3}}>{title}</div>
-          <div style={{fontSize:12,color:headerSub,marginTop:5}}>{subtitle}</div>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0,marginLeft:12}}>
-          <button onClick={()=>setDark(d=>!d)} style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>
-            {dark?"☀️":"🌙"}
-          </button>
-          <button onClick={()=>setMode(m=>m==="restaurant"?"whisky":"restaurant")}
-            title={switchTitle}
-            style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>
-            {switchIcon}
-          </button>
-        </div>
-      </div>
-      <div style={{background:"rgba(0,0,0,0.25)",padding:"7px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 <strong style={{color:"white"}}>{user}</strong></span>
-        <button onClick={()=>{localStorage.removeItem("rmg_user");window.location.reload();}} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
-      </div>
-    </>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// RESTAURANT FÜHRER
-// ═══════════════════════════════════════════════════════════════════════════
-
-function RestCard({r,onClick,t}){
-  const avg=getAvgRest(r);
-  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
-  const raters=Object.keys(normalizeRest(r).ratings||{});
-  const display=raters.length>0?raters:(r.author?[r.author]:[]);
-  return(
-    <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
-      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{flex:1,minWidth:0,paddingRight:8}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{r.name}</div>
-          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
-        </div>
-        <div style={{textAlign:"right",flexShrink:0}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.restAccent}}>{avg.avg}</div>
-          <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
-        </div>
-      </div>
-      <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
-      <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <Badge value={avg.food} color="#2e7d52"/><span style={{fontSize:11,color:t.sub}}>Essen</span>
-        <Badge value={avg.service} color="#1a5f8c"/><span style={{fontSize:11,color:t.sub}}>Service</span>
-        <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(avg.price)}</span>
-      </div>
-      {display.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {display.join(", ")}</span></div>}
-    </div>
-  );
-}
-
-function RestSuggCard({s,onClick,t}){
-  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
-  return(
-    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12,transition:"transform 0.15s"}}
-      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
-          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
-        </div>
-        <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:t.restSuggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
-      </div>
-      <div style={{textAlign:"right",marginTop:8}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>vorgeschlagen von {s.author}</span></div>
-    </div>
-  );
-}
-
-// ── SwipeableSheet: Wisch-nach-unten-Geste ────────────────────────────────
 function SwipeableSheet({onClose,t,children}){
   const {useState:uS,useRef:uR}=React;
   const [dragY,setDragY]=uS(0);
   const startY=uR(null);
   const sheetRef=uR(null);
-
   const onTouchStart=e=>{
-    // Nur starten wenn am oberen Rand des Sheets (erste 60px)
     const rect=sheetRef.current.getBoundingClientRect();
     if(e.touches[0].clientY-rect.top>60)return;
     startY.current=e.touches[0].clientY;
@@ -352,10 +291,8 @@ function SwipeableSheet({onClose,t,children}){
   };
   const onTouchEnd=()=>{
     if(dragY>80)onClose();
-    setDragY(0);
-    startY.current=null;
+    setDragY(0);startY.current=null;
   };
-
   return(
     <div style={{position:"fixed",inset:0,background:`rgba(0,0,0,${Math.max(0,0.65-(dragY/300)*0.65)})`,zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
       <div ref={sheetRef} onClick={e=>e.stopPropagation()}
@@ -368,83 +305,500 @@ function SwipeableSheet({onClose,t,children}){
   );
 }
 
-function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
-  if(!r)return null;
-  const norm=normalizeRest(r);const avg=getAvgRest(r);
-  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
-  const ratings=Object.entries(norm.ratings||{});
-  const isAuthor=user===r.author;const hasRated=!!norm.ratings?.[user];
+// Login & Registrierung
+function LoginScreen({onLogin}){
+  const [tab,setTab]=useState("login");
+  const [name,setName]=useState("");
+  const [pw,setPw]=useState("");
+  const [pw2,setPw2]=useState("");
+  const [error,setError]=useState("");
+  const [busy,setBusy]=useState(false);
+  const inputStyle=err=>({width:"100%",padding:"13px 16px",borderRadius:12,fontSize:15,border:`1.5px solid ${err?"#c03028":"#dfdcd6"}`,outline:"none",color:"#1b1713",marginBottom:12,textAlign:"center"});
+  const doLogin=async()=>{
+    if(!name.trim()||!pw){setError("Bitte Name und Passwort eingeben.");return;}
+    setBusy(true);setError("");
+    try{
+      const snap=await new Promise((res,rej)=>db.ref("users/"+name.trim()).once("value",res,rej));
+      const u=snap.val();
+      if(!u){setError("Benutzer nicht gefunden.");setBusy(false);return;}
+      const h=await hashPw(name.trim(),pw);
+      if(h!==u.pwHash){setError("Falsches Passwort.");setBusy(false);return;}
+      localStorage.setItem("rmg_user",name.trim());
+      onLogin(name.trim());
+    }catch(e){setError("Verbindungsfehler. Bitte erneut versuchen.");}
+    setBusy(false);
+  };
+  const doRegister=async()=>{
+    const n=name.trim();
+    if(!validUsername(n)){setError("Name: 2–20 Zeichen, nur Buchstaben, Zahlen, Leerzeichen, - und _.");return;}
+    if(pw.length<6){setError("Passwort: mindestens 6 Zeichen.");return;}
+    if(pw!==pw2){setError("Passwörter stimmen nicht überein.");return;}
+    setBusy(true);setError("");
+    try{
+      const snap=await new Promise((res,rej)=>db.ref("users/"+n).once("value",res,rej));
+      if(snap.val()){setError("Dieser Name ist bereits vergeben.");setBusy(false);return;}
+      const h=await hashPw(n,pw);
+      await db.ref("users/"+n).set({pwHash:h,createdAt:Date.now()});
+      localStorage.setItem("rmg_user",n);
+      onLogin(n);
+    }catch(e){setError("Fehler bei der Registrierung.");}
+    setBusy(false);
+  };
   return(
-    <SwipeableSheet onClose={onClose} t={t}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{r.name}</div>
-        <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
-        <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
-        <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {[["🍽️ Essen",avg.food,"#2e7d52"],["🤝 Service",avg.service,"#1a5f8c"]].map(([lbl,val,col])=>(
-            <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-              <div style={{fontSize:11,color:t.sub}}>{lbl}</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:col}}>{val}/10</div>
-              <div style={{fontSize:10,color:t.tick}}>Durchschnitt</div>
-            </div>
+    <div style={{minHeight:"100vh",background:"#1b1713",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"white",borderRadius:24,padding:"36px 28px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+        <div style={{fontSize:40,marginBottom:8}}>🍽️🥃🎬📺</div>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:19,color:"#1b1713",lineHeight:1.3,marginBottom:4,letterSpacing:"-0.01em"}}>Führer App</div>
+        <div style={{fontSize:12,color:"#8a847c",marginBottom:24}}>Gemeinsam bewerten in Gruppen</div>
+        <div style={{display:"flex",gap:6,background:"#efedea",borderRadius:12,padding:4,marginBottom:20}}>
+          {[["login","Anmelden"],["register","Registrieren"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>{setTab(id);setError("");}}
+              style={{flex:1,padding:"9px 0",borderRadius:9,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:tab===id?"#1b1713":"transparent",color:tab===id?"white":"#5d574f"}}>
+              {lbl}
+            </button>
           ))}
         </div>
-        <div style={{marginTop:10,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-          <span style={{fontSize:12,color:t.sub}}>Preis: </span>
-          <span style={{fontWeight:700,color:t.restAccent}}>{"€".repeat(avg.price)} · {PRICE_LABELS[avg.price]}</span>
-        </div>
-        <div style={{marginTop:20}}>
-          <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
-          {ratings.map(([author,rating])=>(
-            <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span></div>
-              <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}><span>🍽️ {rating.food}/10</span><span>🤝 {rating.service}/10</span><span>{"€".repeat(rating.price)}</span></div>
-              {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
-            </div>
-          ))}
-        </div>
-        {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <button onClick={()=>onEdit(r)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
-          <button onClick={()=>onDelete(r.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
-        </div>}
-        {!isAuthor&&!hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>⭐ Eigene Wertung abgeben</button>}
-        {!isAuthor&&hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
-    </SwipeableSheet>
-  );
-}
-
-function RestSuggModal({s,user,onClose,onDelete,onConvert,t}){
-  if(!s)return null;
-  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
-        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
-        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
-          <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.restSuggAccent,fontWeight:600}}>💡 Vorschlag</span>
-        </div>
-        <div style={{color:t.sub,fontSize:13}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
-        <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
-          <div style={{fontSize:13,color:t.sub}}>Noch nicht besucht.</div>
-          <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
-        </div>
-        <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>⭐ Jetzt bewerten & übernehmen</button>
-        {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+        <input value={name} onChange={e=>{setName(e.target.value);setError("");}} placeholder="Benutzername" style={inputStyle()}/>
+        <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setError("");}}
+          onKeyDown={e=>e.key==="Enter"&&tab==="login"&&doLogin()} placeholder="Passwort" style={inputStyle()}/>
+        {tab==="register"&&(
+          <input type="password" value={pw2} onChange={e=>{setPw2(e.target.value);setError("");}}
+            onKeyDown={e=>e.key==="Enter"&&doRegister()} placeholder="Passwort wiederholen" style={inputStyle()}/>
+        )}
+        {error&&<div style={{color:"#c03028",fontSize:12,marginBottom:12}}>{error}</div>}
+        <button onClick={tab==="login"?doLogin:doRegister} disabled={busy}
+          style={{width:"100%",padding:14,borderRadius:12,background:busy?"#999":"#1b1713",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:busy?"wait":"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>
+          {busy?"Bitte warten…":tab==="login"?"Anmelden":"Konto erstellen"}
+        </button>
       </div>
     </div>
   );
 }
 
-function RestaurantApp({user,dark,setDark,mode,setMode,t}){
+// Gruppenübersicht
+function GroupsOverview({user,groups,onOpen,onLogout,dark,setDark,t}){
+  const [view,setView]=useState("list");
+  const [showAccount,setShowAccount]=useState(false);
+  const [showMaster,setShowMaster]=useState(false);
+  const isMaster=user===MASTER_USER;
+  const [topicF,setTopicF]=useState("");
+  const [sortBy,setSortBy]=useState("name");
+  const [form,setForm]=useState({name:"",topic:"",categories:{restaurant:true,whisky:false,film:false,serie:false}});
+  const [error,setError]=useState("");
+  const [saving,setSaving]=useState(false);
+  const my=groups.filter(g=>g.members&&g.members[user]);
+  const topics=[...new Set(my.map(g=>(g.topic||"").trim()).filter(Boolean))].sort();
+  const shown=my.filter(g=>!topicF||g.topic===topicF).sort((a,b)=>{
+    if(sortBy==="topic"){const c=(a.topic||"").localeCompare(b.topic||"");if(c!==0)return c;}
+    return a.name.localeCompare(b.name);
+  });
+  const createGroup=async()=>{
+    if(!form.name.trim()){setError("Bitte einen Gruppennamen eingeben.");return;}
+    if(!Object.values(form.categories).some(Boolean)){setError("Bitte mindestens eine Kategorie auswählen.");return;}
+    setSaving(true);setError("");
+    try{
+      const id=Date.now().toString();
+      const categories=Object.fromEntries(Object.entries(form.categories).filter(([,v])=>v));
+      await db.ref("groups/"+id).set({id,name:form.name.trim(),topic:form.topic.trim(),categories,members:{[user]:"admin"},createdBy:user,createdAt:Date.now()});
+      setForm({name:"",topic:"",categories:{restaurant:true,whisky:false,film:false,serie:false}});
+      setView("list");
+    }catch{setError("Fehler beim Erstellen.");}
+    setSaving(false);
+  };
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",transition:"background 0.3s"}}>
+      <div style={{background:t.restHeaderBg,padding:"20px 20px 16px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,letterSpacing:"-0.01em"}}>Meine Gruppen</div>
+          <div style={{fontSize:12,color:t.restHeaderSub,marginTop:4}}>{my.length} Gruppe{my.length!==1?"n":""}</div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {isMaster&&<button onClick={()=>setShowMaster(true)} title="Master-Übersicht" style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>📊</button>}
+          <button onClick={()=>setShowAccount(true)} title="Passwort ändern" style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>🔑</button>
+          <button onClick={()=>setDark(d=>!d)} style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>{dark?"☀️":"🌙"}</button>
+        </div>
+      </div>
+      <div style={{background:"rgba(0,0,0,0.25)",padding:"7px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 <strong style={{color:"white"}}>{user}</strong></span>
+        <button onClick={onLogout} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+      </div>
+      {view==="list"&&(
+        <div style={{padding:"20px 16px 40px"}}>
+          {topics.length>0&&(
+            <div style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+              <select value={topicF} onChange={e=>setTopicF(e.target.value)}
+                style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${topicF?t.restFilterOn:t.filterBorder}`,background:topicF?t.restFilterOn:t.filterBg,color:topicF?t.restFilterOnColor:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
+                <option value="">Alle Oberbegriffe</option>
+                {topics.map(o=><option key={o}>{o}</option>)}
+              </select>
+              <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+                style={{padding:"7px 10px",borderRadius:20,border:`1px solid ${t.filterBorder}`,background:t.filterBg,color:t.filterColor,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
+                <option value="name">Sortierung: Name</option>
+                <option value="topic">Sortierung: Oberbegriff</option>
+              </select>
+            </div>
+          )}
+          {shown.length===0?(
+            <div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}>
+              <div style={{fontSize:48}}>👥</div>
+              <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{my.length===0?"Noch keine Gruppen":"Keine Treffer"}</div>
+              <div style={{fontSize:13,marginTop:8}}>{my.length===0?"Erstelle deine erste Gruppe oder lass dich von einem Admin hinzufügen.":"Versuche einen anderen Filter."}</div>
+            </div>
+          ):shown.map(g=>{
+            const cats=Object.keys(g.categories||{});
+            const customCats=Object.values(g.custom||{});
+            const isAdmin=g.members[user]==="admin";
+            return(
+              <div key={g.id} onClick={()=>onOpen(g)}
+                style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1,minWidth:0,paddingRight:8}}>
+                    <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title,letterSpacing:"-0.01em"}}>{g.name}</div>
+                    {g.topic&&<div style={{fontSize:12,color:t.sub,marginTop:2}}>{g.topic}</div>}
+                  </div>
+                  <span style={{background:isAdmin?t.adminBadge:t.memberBadge,color:isAdmin?t.adminBadgeColor:t.memberBadgeColor,borderRadius:10,padding:"3px 10px",fontSize:11,fontWeight:600,flexShrink:0}}>{isAdmin?"Admin":"Mitglied"}</span>
+                </div>
+                <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:18,letterSpacing:2}}>{cats.map(c=>CATEGORY_DEFS[c]?.icon||"").join("")}{customCats.map(c=>c.icon||"⭐").join("")}</span>
+                  <span style={{marginLeft:"auto",fontSize:12,color:t.sub}}>👥 {Object.keys(g.members||{}).length} Mitglied{Object.keys(g.members||{}).length!==1?"er":""}</span>
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={()=>setView("create")}
+            style={{width:"100%",padding:16,borderRadius:14,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif",marginTop:8}}>
+            + Neue Gruppe erstellen
+          </button>
+        </div>
+      )}
+      {view==="create"&&(
+        <div style={{padding:"20px 16px 40px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+            <button onClick={()=>{setView("list");setError("");}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title,letterSpacing:"-0.01em"}}>Neue Gruppe</div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Gruppenname</label>
+            <input value={form.name} onChange={e=>{setForm(p=>({...p,name:e.target.value}));setError("");}} placeholder="z.B. Montagabend"
+              style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>
+          </div>
+          <div style={{marginBottom:20}}>
+            <label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Oberbegriff <span style={{fontWeight:400,color:t.tick}}>(optional, zum Sortieren)</span></label>
+            <input value={form.topic} onChange={e=>setForm(p=>({...p,topic:e.target.value}))} placeholder="z.B. Genuss, Freizeit, Familie"
+              style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>
+          </div>
+          <label style={{display:"block",fontSize:12,color:t.label,marginBottom:8,fontFamily:"'Space Grotesk',sans-serif"}}>Was soll in dieser Gruppe bewertet werden?</label>
+          <div style={{marginBottom:20}}>
+            {Object.entries(CATEGORY_DEFS).map(([id,def])=>{
+              const on=form.categories[id];
+              return(
+                <button key={id} onClick={()=>{setForm(p=>({...p,categories:{...p.categories,[id]:!p.categories[id]}}));setError("");}}
+                  style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"13px 16px",marginBottom:8,background:on?`${t.restNavActive}12`:t.card,borderRadius:12,border:`1.5px solid ${on?t.restNavActive:t.cardBorder}`,cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:22}}>{def.icon}</span>
+                  <span style={{fontSize:14,fontWeight:on?600:400,color:t.title,flex:1}}>{def.label}</span>
+                  <span style={{width:20,height:20,borderRadius:6,border:`2px solid ${on?t.restNavActive:t.inputBorder}`,background:on?t.restNavActive:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:t.bg,fontSize:13,fontWeight:700}}>{on?"✓":""}</span>
+                </button>
+              );
+            })}
+          </div>
+          {error&&<div style={{color:t.danger,fontSize:12,marginBottom:12}}>{error}</div>}
+          <button onClick={createGroup} disabled={saving}
+            style={{width:"100%",padding:16,borderRadius:14,background:saving?"#999":t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:saving?"wait":"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>
+            {saving?"Wird erstellt…":"Gruppe erstellen"}
+          </button>
+          <div style={{fontSize:12,color:t.sub,marginTop:12,textAlign:"center"}}>Du wirst automatisch Admin dieser Gruppe.</div>
+        </div>
+      )}
+      {showAccount&&<AccountSheet user={user} onClose={()=>setShowAccount(false)} t={t}/>}
+      {showMaster&&<MasterDashboard onClose={()=>setShowMaster(false)} t={t}/>}
+    </div>
+  );
+}
+
+// Gruppen-Einstellungen (Admin)
+function GroupSettingsSheet({group,user,onClose,t}){
+  const [newMember,setNewMember]=useState("");
+  const [msg,setMsg]=useState("");
+  const [catForm,setCatForm]=useState({name:"",icon:"",field1Label:"",crit1Label:"",crit2Label:""});
+  const [showCatForm,setShowCatForm]=useState(false);
+  const isAdmin=group.members?.[user]==="admin";
+  const members=Object.entries(group.members||{}).sort((a,b)=>a[0].localeCompare(b[0]));
+  const addMember=async()=>{
+    const n=newMember.trim();
+    if(!n){setMsg("Bitte Benutzernamen eingeben.");return;}
+    if(group.members?.[n]){setMsg("Ist bereits Mitglied.");return;}
+    try{
+      const snap=await new Promise((res,rej)=>db.ref("users/"+n).once("value",res,rej));
+      if(!snap.val()){setMsg("Benutzer \""+n+"\" existiert nicht. Er muss sich zuerst registrieren.");return;}
+      await db.ref("groups/"+group.id+"/members/"+n).set("member");
+      setNewMember("");setMsg("✅ "+n+" hinzugefügt.");
+    }catch{setMsg("Fehler beim Hinzufügen.");}
+  };
+  const setRole=async(name,role)=>{
+    const admins=members.filter(([,r])=>r==="admin");
+    if(role==="member"&&admins.length===1&&admins[0][0]===name){setMsg("Die Gruppe braucht mindestens einen Admin.");return;}
+    try{await db.ref("groups/"+group.id+"/members/"+name).set(role);setMsg("");}
+    catch{setMsg("Fehler.");}
+  };
+  const enableCategory=async(catId)=>{
+    try{await db.ref("groups/"+group.id+"/categories/"+catId).set(true);}catch{setMsg("Fehler.");}
+  };
+  const addCustomCategory=async()=>{
+    if(!catForm.name.trim()){setMsg("Bitte Name der Kategorie eingeben.");return;}
+    try{
+      const id=Date.now().toString();
+      await db.ref("groups/"+group.id+"/custom/"+id).set({
+        id,name:catForm.name.trim(),icon:(catForm.icon||"⭐").trim().slice(0,4),
+        field1Label:catForm.field1Label.trim()||"Herkunft / Marke",
+        crit1Label:catForm.crit1Label.trim()||"Qualität",
+        crit2Label:catForm.crit2Label.trim()||"Preis-Leistung",
+      });
+      setCatForm({name:"",icon:"",field1Label:"",crit1Label:"",crit2Label:""});
+      setShowCatForm(false);setMsg("✅ Kategorie hinzugefügt.");
+    }catch{setMsg("Fehler.");}
+  };
+  const inactiveStandard=Object.keys(CATEGORY_DEFS).filter(c=>!group.categories?.[c]);
+  const inp={width:"100%",padding:"11px 13px",borderRadius:10,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,marginBottom:8};
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:20,color:t.title,letterSpacing:"-0.01em"}}>⚙️ {group.name}</div>
+      <div style={{fontSize:12,color:t.sub,marginTop:2,marginBottom:20}}>{group.topic||"Gruppeneinstellungen"}</div>
+      <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,marginBottom:8}}>Mitglieder ({members.length})</div>
+      {members.map(([name,role])=>(
+        <div key={name} style={{display:"flex",alignItems:"center",gap:10,background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
+          <span style={{fontWeight:600,fontSize:13,color:t.title,flex:1}}>{name}{name===user?" (du)":""}</span>
+          <span style={{background:role==="admin"?t.adminBadge:t.memberBadge,color:role==="admin"?t.adminBadgeColor:t.memberBadgeColor,borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:600}}>{role==="admin"?"Admin":"Mitglied"}</span>
+          {isAdmin&&role==="member"&&(<button onClick={()=>setRole(name,"admin")} style={{fontSize:11,color:t.restAccent,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Zum Admin machen</button>)}
+          {isAdmin&&role==="admin"&&name!==user&&(<button onClick={()=>setRole(name,"member")} style={{fontSize:11,color:t.sub,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Admin entziehen</button>)}
+        </div>
+      ))}
+      {isAdmin&&(
+        <>
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <input value={newMember} onChange={e=>{setNewMember(e.target.value);setMsg("");}}
+              onKeyDown={e=>e.key==="Enter"&&addMember()} placeholder="Benutzername hinzufügen…"
+              style={{...inp,marginBottom:0,flex:1}}/>
+            <button onClick={addMember} style={{padding:"0 18px",borderRadius:10,background:t.restBtn,color:t.btnColor,border:"none",cursor:"pointer",fontSize:14,fontWeight:600}}>+</button>
+          </div>
+          <div style={{fontSize:11,color:t.tick,marginTop:6}}>Die Person muss bereits ein Konto haben (Registrierung im Login-Bildschirm).</div>
+          <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,marginTop:24,marginBottom:8}}>Bewertungskategorien</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+            {Object.keys(group.categories||{}).map(c=>(
+              <span key={c} style={{padding:"6px 12px",borderRadius:16,background:t.innerCard,border:`1px solid ${t.cardBorder}`,fontSize:12,color:t.title}}>{CATEGORY_DEFS[c]?.icon} {CATEGORY_DEFS[c]?.label}</span>
+            ))}
+            {Object.values(group.custom||{}).map(c=>(
+              <span key={c.id} style={{padding:"6px 12px",borderRadius:16,background:t.innerCard,border:`1px solid ${t.cardBorder}`,fontSize:12,color:t.title}}>{c.icon||"⭐"} {c.name}</span>
+            ))}
+          </div>
+          {inactiveStandard.length>0&&(
+            <>
+              <div style={{fontSize:11,color:t.sub,marginBottom:6}}>Standard-Kategorie aktivieren:</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                {inactiveStandard.map(c=>(
+                  <button key={c} onClick={()=>enableCategory(c)}
+                    style={{padding:"6px 12px",borderRadius:16,background:"transparent",border:`1.5px dashed ${t.inputBorder}`,fontSize:12,color:t.sub,cursor:"pointer"}}>
+                    + {CATEGORY_DEFS[c].icon} {CATEGORY_DEFS[c].label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {!showCatForm?(
+            <button onClick={()=>setShowCatForm(true)}
+              style={{width:"100%",padding:12,borderRadius:10,background:t.secondaryBtn,color:t.secondaryBtnColor,border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>
+              + Eigene Kategorie erstellen
+            </button>
+          ):(
+            <div style={{background:t.innerCard,borderRadius:12,padding:14,border:`1px solid ${t.cardBorder}`}}>
+              <input value={catForm.name} onChange={e=>setCatForm(p=>({...p,name:e.target.value}))} placeholder="Name (z.B. Biere)" style={inp}/>
+              <input value={catForm.icon} onChange={e=>setCatForm(p=>({...p,icon:e.target.value}))} placeholder="Emoji (z.B. 🍺)" style={inp}/>
+              <input value={catForm.field1Label} onChange={e=>setCatForm(p=>({...p,field1Label:e.target.value}))} placeholder="2. Feld (z.B. Brauerei)" style={inp}/>
+              <input value={catForm.crit1Label} onChange={e=>setCatForm(p=>({...p,crit1Label:e.target.value}))} placeholder="Kriterium 1 (z.B. Geschmack)" style={inp}/>
+              <input value={catForm.crit2Label} onChange={e=>setCatForm(p=>({...p,crit2Label:e.target.value}))} placeholder="Kriterium 2 (z.B. Preis-Leistung)" style={inp}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={addCustomCategory} style={{flex:1,padding:11,borderRadius:10,background:t.restBtn,color:t.btnColor,border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Erstellen</button>
+                <button onClick={()=>setShowCatForm(false)} style={{flex:1,padding:11,borderRadius:10,background:t.secondaryBtn,color:t.secondaryBtnColor,border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Abbrechen</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {msg&&<div style={{fontSize:12,color:msg.startsWith("✅")?"#2e7d52":t.danger,marginTop:12}}>{msg}</div>}
+    </SwipeableSheet>
+  );
+}
+
+// ModeMenu & Header
+function modesForGroup(group){
+  const order=["restaurant","whisky","film","serie"];
+  const modes=order.filter(c=>group.categories?.[c]).map(c=>[c,CATEGORY_DEFS[c].icon,CATEGORY_DEFS[c].label]);
+  Object.values(group.custom||{}).forEach(c=>modes.push(["c:"+c.id,c.icon||"⭐",c.name]));
+  return modes;
+}
+function ModeMenu({mode,setMode,modes,onClose,t}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.modal,borderRadius:"24px 24px 0 0",padding:"20px 16px 40px"}}>
+        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 16px"}}/>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:16,fontWeight:700,color:t.title,marginBottom:16,textAlign:"center"}}>Bereich wechseln</div>
+        {modes.map(([id,icon,label])=>(
+          <button key={id} onClick={()=>{setMode(id);onClose();}}
+            style={{display:"flex",alignItems:"center",gap:16,width:"100%",padding:"14px 16px",marginBottom:8,background:mode===id?`${t.restNavActive}18`:t.innerCard,borderRadius:12,border:`1.5px solid ${mode===id?t.restNavActive:t.cardBorder}`,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:24}}>{icon}</span>
+            <span style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:15,fontWeight:mode===id?700:400,color:t.title,flex:1}}>{label}</span>
+            {mode===id&&<span style={{color:t.restNavActive,fontSize:18}}>✓</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+function AppHeader({user,dark,setDark,mode,setMode,modes,t,title,subtitle,headerBg,headerSub,onBack,isAdmin,onSettings}){
+  const [showMenu,setShowMenu]=useState(false);
+  const currentIcon=(modes.find(m=>m[0]===mode)||["","⭐"])[1];
+  return(
+    <>
+      <div style={{background:headerBg,padding:"20px 20px 16px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{display:"flex",gap:10,flex:1,minWidth:0}}>
+          <button onClick={onBack} title="Zur Gruppenübersicht" style={{background:"none",border:"none",color:"rgba(255,255,255,0.8)",fontSize:20,cursor:"pointer",paddingTop:1,flexShrink:0}}>←</button>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:16,fontWeight:700,lineHeight:1.3,letterSpacing:"-0.01em"}}>{title}</div>
+            <div style={{fontSize:12,color:headerSub,marginTop:5}}>{subtitle}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0,marginLeft:12}}>
+          <div style={{display:"flex",gap:6}}>
+            {isAdmin&&<button onClick={onSettings} title="Gruppeneinstellungen" style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>⚙️</button>}
+            <button onClick={()=>setDark(d=>!d)} style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>{dark?"☀️":"🌙"}</button>
+          </div>
+          {modes.length>1&&<button onClick={()=>setShowMenu(true)} title="Bereich wechseln" style={{background:t.modeSwitchBg,border:`1px solid ${t.modeSwitchBorder}`,borderRadius:18,padding:"5px 11px",cursor:"pointer",fontSize:15}}>{currentIcon}</button>}
+        </div>
+      </div>
+      <div style={{background:"rgba(0,0,0,0.25)",padding:"7px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:12,color:"rgba(255,255,255,0.9)"}}>👤 <strong style={{color:"white"}}>{user}</strong></span>
+        <button onClick={()=>{localStorage.removeItem("rmg_user");window.location.reload();}} style={{fontSize:11,color:"rgba(255,255,255,0.7)",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Abmelden</button>
+      </div>
+      {showMenu&&<ModeMenu mode={mode} setMode={setMode} modes={modes} onClose={()=>setShowMenu(false)} t={t}/>}
+    </>
+  );
+}
+
+// RESTAURANT FÜHRER
+function RestCard({r,onClick,t}){
+  const avg=getAvgRest(r);
+  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+  const raters=Object.keys(r.ratings||{});
+  return(
+    <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1,minWidth:0,paddingRight:8}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title,letterSpacing:"-0.01em"}}>{r.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.restAccent}}>{avg.avg}</div>
+          <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
+        </div>
+      </div>
+      <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <Badge value={avg.food} color="#2e7d52"/><span style={{fontSize:11,color:t.sub}}>Essen</span>
+        <Badge value={avg.service} color="#1a5f8c"/><span style={{fontSize:11,color:t.sub}}>Service</span>
+        <span style={{marginLeft:"auto",fontSize:13,color:t.sub}}>{"€".repeat(avg.price)}</span>
+      </div>
+      {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
+    </div>
+  );
+}
+function RestSuggCard({s,onClick,t}){
+  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
+  return(
+    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
+        </div>
+        <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:t.restSuggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
+      </div>
+      <div style={{textAlign:"right",marginTop:8}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>vorgeschlagen von {s.author}</span></div>
+    </div>
+  );
+}
+function RestModal({r,user,onClose,onDelete,onEdit,onRate,t}){
+  if(!r)return null;
+  const avg=getAvgRest(r);
+  const cuisines=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+  const ratings=Object.entries(r.ratings||{});
+  const isAuthor=user===r.author;const hasRated=!!r.ratings?.[user];
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title,letterSpacing:"-0.01em"}}>{r.name}</div>
+      <div style={{color:t.sub,fontSize:13,marginTop:4}}>📍 {r.city} · {cuisines.join(" & ")}</div>
+      <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {[["🍽️ Essen",avg.food,"#2e7d52"],["🤝 Service",avg.service,"#1a5f8c"]].map(([lbl,val,col])=>(
+          <div key={lbl} style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+            <div style={{fontSize:11,color:t.sub}}>{lbl}</div>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:26,fontWeight:700,color:col}}>{val}/10</div>
+            <div style={{fontSize:10,color:t.tick}}>Durchschnitt</div>
+          </div>
+        ))}
+      </div>
+      <div style={{marginTop:10,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+        <span style={{fontSize:12,color:t.sub}}>Preis: </span>
+        <span style={{fontWeight:700,color:t.restAccent}}>{"€".repeat(avg.price)} · {PRICE_LABELS[avg.price]}</span>
+      </div>
+      <div style={{marginTop:20}}>
+        <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
+        {ratings.map(([author,rating])=>(
+          <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"10px 14px",marginBottom:6,border:`1px solid ${t.ratingBorder}`}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.sub}}>★ {rating.stars}/10</span></div>
+            <div style={{display:"flex",gap:12,marginTop:4,fontSize:12,color:t.sub}}><span>🍽️ {rating.food}/10</span><span>🤝 {rating.service}/10</span><span>{"€".repeat(rating.price)}</span></div>
+            {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
+          </div>
+        ))}
+      </div>
+      {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <button onClick={()=>onEdit(r)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
+        <button onClick={()=>onDelete(r.id)} style={{padding:"12px",borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
+      </div>}
+      {!isAuthor&&!hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>⭐ Eigene Wertung abgeben</button>}
+      {!isAuthor&&hasRated&&<button onClick={()=>onRate(r)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>✏️ Meine Wertung bearbeiten</button>}
+    </SwipeableSheet>
+  );
+}
+function RestSuggModal({s,user,onClose,onDelete,onConvert,t}){
+  if(!s)return null;
+  const cuisines=Array.isArray(s.cuisines)?s.cuisines:[];
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
+        <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.restSuggAccent,fontWeight:600}}>💡 Vorschlag</span>
+      </div>
+      <div style={{color:t.sub,fontSize:13}}>📍 {s.city}{cuisines.length?" · "+cuisines.join(" & "):""}</div>
+      <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
+        <div style={{fontSize:13,color:t.sub}}>Noch nicht besucht.</div>
+        <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
+      </div>
+      <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>⭐ Jetzt bewerten & übernehmen</button>
+      {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+    </SwipeableSheet>
+  );
+}
+function RestaurantApp({user,dark,setDark,mode,setMode,modes,t,group,members,onBack,isAdmin,onSettings}){
   const [view,setView]=useState("list");
   const [activeSection,setSection]=useState("list");
   const [restaurants,setRestaurants]=useState([]);
   const [suggestions,setSuggestions]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState(EMPTY_REST);
-  const [ratingForm,setRatingForm]=useState(EMPTY_RATING);
+  const [form,setForm]=useState({...EMPTY_REST});
+  const [ratingForm,setRatingForm]=useState({...EMPTY_RATING});
   const [ratingTarget,setRatingTarget]=useState(null);
-  const [suggForm,setSuggForm]=useState(EMPTY_SUGG);
+  const [suggForm,setSuggForm]=useState({...EMPTY_SUGG});
   const [suggToConvert,setSuggToConvert]=useState(null);
   const [restFilter,setRestFilter]=useState({search:"",k1:"",k2:"",author:""});
   const [suggFilter,setSuggFilter]=useState({search:"",k1:"",k2:""});
@@ -456,7 +810,6 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState("");
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
-
   useEffect(()=>{
     let ref;try{ref=db.ref("restaurants");ref.on("value",snap=>{const d=snap.val();setRestaurants(d?Object.values(d):[]);setLoading(false);},()=>setLoading(false));}catch{setLoading(false);}
     const tm=setTimeout(()=>setLoading(false),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
@@ -465,133 +818,120 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
     let ref;try{ref=db.ref("suggestions");ref.on("value",snap=>{const d=snap.val();setSuggestions(d?Object.values(d):[]);});}catch{}
     return()=>ref&&ref.off();
   },[]);
-
-  const cities=[...new Set(restaurants.map(r=>r.city?.trim()).filter(Boolean))].sort();
-  const cuisines=[...new Set(restaurants.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
-  const allRaters=[...new Set(restaurants.flatMap(r=>Object.keys(normalizeRest(r).ratings||{})))].sort();
-  const filteredRest=restaurants.filter(r=>{
-    const norm=normalizeRest(r);const rc=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
-    return(!restFilter.k1||r.city===restFilter.k1)&&(!restFilter.k2||rc.includes(restFilter.k2))&&(!restFilter.author||Object.keys(norm.ratings||{}).includes(restFilter.author))&&(!restFilter.search||r.name.toLowerCase().includes(restFilter.search.toLowerCase()));
+  const visible=restaurants.map(r=>restrictToMembers(normalizeRest(r),members)).filter(r=>Object.keys(r.ratings).length>0||members.includes(r.author));
+  const visibleSugg=suggestions.filter(s=>members.includes(s.author));
+  const cities=[...new Set(visible.map(r=>r.city?.trim()).filter(Boolean))].sort();
+  const cuisines=[...new Set(visible.flatMap(r=>Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[])))].sort();
+  const allRaters=[...new Set(visible.flatMap(r=>Object.keys(r.ratings||{})))].sort();
+  const filteredRest=visible.filter(r=>{
+    const rc=Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]);
+    return(!restFilter.k1||r.city===restFilter.k1)&&(!restFilter.k2||rc.includes(restFilter.k2))&&(!restFilter.author||Object.keys(r.ratings||{}).includes(restFilter.author))&&(!restFilter.search||r.name.toLowerCase().includes(restFilter.search.toLowerCase()));
   }).sort((a,b)=>getAvgRest(b).avg-getAvgRest(a).avg);
-  const suggCities=[...new Set(suggestions.map(s=>s.city?.trim()).filter(Boolean))].sort();
-  const suggCuisines=[...new Set(suggestions.flatMap(s=>Array.isArray(s.cuisines)?s.cuisines:[]))].sort();
-  const filteredSugg=suggestions.filter(s=>{
+  const suggCities=[...new Set(visibleSugg.map(s=>s.city?.trim()).filter(Boolean))].sort();
+  const suggCuisines=[...new Set(visibleSugg.flatMap(s=>Array.isArray(s.cuisines)?s.cuisines:[]))].sort();
+  const filteredSugg=visibleSugg.filter(s=>{
     const c=Array.isArray(s.cuisines)?s.cuisines:[];
     return(!suggFilter.k1||s.city===suggFilter.k1)&&(!suggFilter.k2||c.includes(suggFilter.k2))&&(!suggFilter.search||s.name.toLowerCase().includes(suggFilter.search.toLowerCase()));
   });
-
   const valRest=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.city.trim())e.city="Bitte Stadt eingeben";if(!form.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
   const valSugg=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.city.trim())e.city="Bitte Stadt eingeben";if(!suggForm.cuisines.length)e.cuisines="Bitte Küche auswählen";return e;};
-
-  const handleAdd=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("restaurants/"+id).set({id,name:form.name,city:form.city,cuisines:form.cuisines,author:user,ratings:{[user]:{food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_REST);setErrors({});setView("list");setSection("list");showToast("✅ Gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
-  const handleEdit=r=>{const norm=normalizeRest(r);const my=norm.ratings?.[user]||EMPTY_RATING;setForm({name:r.name,city:r.city,cuisines:Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]),food:my.food,service:my.service,price:my.price,stars:my.stars,kommentar:my.kommentar||""});setEditingId(r.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
-  const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city,cuisines:form.cuisines});await db.ref(`restaurants/${editingId}/ratings/${user}`).set({food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar});setForm(EMPTY_REST);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAdd=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("restaurants/"+id).set({id,name:form.name,city:form.city.trim(),cuisines:form.cuisines,author:user,ratings:{[user]:{food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm({...EMPTY_REST});setErrors({});setView("list");setSection("list");showToast("✅ Gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=r=>{const my=r.ratings?.[user]||EMPTY_RATING;setForm({name:r.name,city:r.city,cuisines:Array.isArray(r.cuisines)?r.cuisines:(r.cuisine?[r.cuisine]:[]),food:my.food,service:my.service,price:my.price,stars:my.stars,kommentar:my.kommentar||""});setEditingId(r.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valRest();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("restaurants/"+editingId).update({name:form.name,city:form.city.trim(),cuisines:form.cuisines});await db.ref("restaurants/"+editingId+"/ratings/"+user).set({food:form.food,service:form.service,price:form.price,stars:form.stars,kommentar:form.kommentar});setForm({...EMPTY_REST});setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDelete=async id=>{try{await db.ref("restaurants/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
-  const startRate=r=>{const norm=normalizeRest(r);setRatingForm(norm.ratings?.[user]||EMPTY_RATING);setRatingTarget(r);setSelected(null);setView("rate");};
+  const startRate=r=>{setRatingForm(r.ratings?.[user]||{...EMPTY_RATING});setRatingTarget(r);setSelected(null);setView("rate");};
   const handleSaveRating=async()=>{setSaving(true);try{
+    const original=restaurants.find(x=>x.id===ratingTarget.id)||ratingTarget;
     const updates={};
-    updates[`restaurants/${ratingTarget.id}/ratings/${user}`]=ratingForm;  // ratingForm already includes kommentar
-    // Mischzustand-Migration: falls Autor-Wertung noch als Top-Level-Felder in Firebase liegt
-    if(ratingTarget.author && ratingTarget.food!==undefined && !ratingTarget.ratings?.[ratingTarget.author]){
-      updates[`restaurants/${ratingTarget.id}/ratings/${ratingTarget.author}`]={food:ratingTarget.food??5,service:ratingTarget.service??5,price:ratingTarget.price??3,stars:ratingTarget.stars??7};
+    updates["restaurants/"+ratingTarget.id+"/ratings/"+user]=ratingForm;
+    if(original.author&&original.food!==undefined&&!original.ratings?.[original.author]){
+      updates["restaurants/"+ratingTarget.id+"/ratings/"+original.author]={food:original.food??5,service:original.service??5,price:original.price??3,stars:original.stars??7};
     }
     await db.ref().update(updates);
     setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");
   }catch{showToast("⚠️ Fehler");}setSaving(false);};
-  const handleAddSugg=async()=>{const e=valSugg();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("suggestions/"+id).set({id,name:suggForm.name,city:suggForm.city,cuisines:suggForm.cuisines,author:user});setSuggForm(EMPTY_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAddSugg=async()=>{const e=valSugg();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("suggestions/"+id).set({id,name:suggForm.name,city:suggForm.city.trim(),cuisines:suggForm.cuisines,author:user});setSuggForm({...EMPTY_SUGG});setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDeleteSugg=async id=>{try{await db.ref("suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
-  const handleConvertSugg=s=>{setForm({name:s.name,city:s.city,cuisines:Array.isArray(s.cuisines)?s.cuisines:[],food:5,service:5,price:3,stars:7});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
+  const handleConvertSugg=s=>{setForm({name:s.name,city:s.city,cuisines:Array.isArray(s.cuisines)?s.cuisines:[],food:5,service:5,price:3,stars:7,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
   const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
   const navTo=s=>{setSection(s);setView(s);setSelected(null);setSuggSelected(null);};
-  const navAdd=()=>{if(activeSection==="list"){setForm(EMPTY_REST);setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm(EMPTY_SUGG);setSuggErrors({});setView("add-suggestion");}};
+  const navAdd=()=>{if(activeSection==="list"){setForm({...EMPTY_REST});setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm({...EMPTY_SUGG});setSuggErrors({});setView("add-suggestion");}};
   const navActive=view==="list"||view==="rate";
   const suggActive=view==="suggestions";
   const addActive=view==="add"||view==="add-suggestion";
   const navColor=t.restNavActive;
-  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.restBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1};
-
-  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
-
+  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.restBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Space Grotesk',sans-serif",opacity:saving?0.7:1};
+  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Space Grotesk',sans-serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
   return(
     <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:92,transition:"background 0.3s"}}>
-      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}
-        title="🍽️ Restaurantführer der Montagabendgesellschaft"
-        subtitle={`${restaurants.length} bewertet · ${suggestions.length} Vorschlag${suggestions.length!==1?"e":""}`}
-        headerBg={t.restHeaderBg} headerSub={t.restHeaderSub}/>
-
+      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} modes={modes} t={t}
+        title={"🍽️ Restaurants · "+group.name}
+        subtitle={visible.length+" bewertet · "+visibleSugg.length+" Vorschlag"+(visibleSugg.length!==1?"e":"")}
+        headerBg={t.restHeaderBg} headerSub={t.restHeaderSub} onBack={onBack} isAdmin={isAdmin} onSettings={onSettings}/>
       {view==="list"&&(
         <div style={{padding:"20px 16px"}}>
           <FilterBar filter={restFilter} setFilter={setRestFilter} col1={cities} col2={cuisines} col1Label="Alle Städte" col2Label="Alle Küchen" extra={[["author","Alle Bewerter",allRaters]]} filterOn={t.restFilterOn} filterOnColor={t.restFilterOnColor} t={t}/>
-          {filteredRest.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{restaurants.length===0?"Noch keine Restaurants":"Keine Treffer"}</div></div>):filteredRest.map(r=><RestCard key={r.id} r={r} onClick={()=>setSelected(r)} t={t}/>)}
+          {filteredRest.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visible.length===0?"Noch keine Restaurants":"Keine Treffer"}</div></div>):filteredRest.map(r=><RestCard key={r.id} r={r} onClick={()=>setSelected(r)} t={t}/>)}
         </div>
       )}
       {view==="suggestions"&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Restaurant Vorschläge</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Restaurant Vorschläge</div>
           <div style={{fontSize:13,color:t.sub,marginBottom:16}}>Restaurants die ihr noch besuchen möchtet</div>
           <FilterBar filter={suggFilter} setFilter={setSuggFilter} col1={suggCities} col2={suggCuisines} col1Label="Alle Städte" col2Label="Alle Küchen" filterOn={t.restFilterOn} filterOnColor={t.restFilterOnColor} t={t}/>
-          {filteredSugg.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{suggestions.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredSugg.map(s=><RestSuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
+          {filteredSugg.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visibleSugg.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredSugg.map(s=><RestSuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
         </div>
       )}
       {view==="add"&&(
         <div style={{padding:"20px 16px"}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
-            <button onClick={()=>{setView(editingId?"list":activeSection);setForm(EMPTY_REST);setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
-            <div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Restaurant hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.restSuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
+            <button onClick={()=>{setView(editingId?"list":activeSection);setForm({...EMPTY_REST});setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
+            <div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Restaurant hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.restSuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
           </div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label><input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="r-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="r-cities">{cities.map(c=><option key={c} value={c}/>)}</datalist>{errors.city&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.city}</div>}</div>
-          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Art der Küche <span style={{fontWeight:400,color:form.cuisines.length===3?"#e05030":t.tick}}>({form.cuisines.length}/3)</span></label><TypeChips value={form.cuisines} onChange={v=>{f("cuisines",v);setErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{errors.cuisines&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.cuisines}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Stadt</label><input value={form.city} onChange={e=>{f("city",e.target.value);setErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="r-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.city?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="r-cities">{cities.map(c=><option key={c} value={c}/>)}</datalist>{errors.city&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.city}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Art der Küche <span style={{fontWeight:400,color:form.cuisines.length===3?t.danger:t.tick}}>({form.cuisines.length}/3)</span></label><TypeChips value={form.cuisines} onChange={v=>{f("cuisines",v);setErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{errors.cuisines&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.cuisines}</div>}</div>
           <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-            <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
+            <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
             <Slider label="🍽️ Essen" value={form.food} min={0} max={10} onChange={v=>f("food",v)} color="#2e7d52" t={t}/>
             <Slider label="🤝 Service" value={form.service} min={0} max={10} onChange={v=>f("service",v)} color="#1a5f8c" t={t}/>
-            <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.restAccent} display={`${"€".repeat(form.price)} ${PRICE_LABELS[form.price]}`} t={t}/>
+            <Slider label="💶 Preis" value={form.price} min={1} max={5} onChange={v=>f("price",v)} color={t.restAccent} display={"€".repeat(form.price)+" "+PRICE_LABELS[form.price]} t={t}/>
             <Slider label="⭐ Sterne" value={form.stars} min={0} max={10} onChange={v=>f("stars",v)} color="#e8a020" t={t}/>
-            <div>
-              <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
-              <textarea value={form.kommentar} onChange={e=>f("kommentar",e.target.value)}
-                placeholder="Notizen, Empfehlungen, besondere Gerichte…"
-                style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
-            </div>
+            <div><div style={{fontSize:13,fontFamily:"'Space Grotesk',sans-serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+              <textarea value={form.kommentar} onChange={e=>f("kommentar",e.target.value)} placeholder="Notizen, Empfehlungen, besondere Gerichte…" style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/></div>
           </div>
           <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Restaurant speichern"}</button>
         </div>
       )}
       {view==="add-suggestion"&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm(EMPTY_SUGG);setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>Vorschlag hinzufügen</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm({...EMPTY_SUGG});setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>Vorschlag hinzufügen</div></div>
           <div style={{background:t.suggBadgeBg,borderRadius:12,padding:"10px 14px",marginBottom:20,border:`1px solid ${t.suggBorder}`}}><div style={{fontSize:12,color:t.restSuggAccent}}>💡 Noch nicht besucht — als Idee für den nächsten Abend.</div></div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Stadt</label><input value={suggForm.city} onChange={e=>{sf("city",e.target.value);setSuggErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="rs-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.city?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="rs-cities">{[...new Set([...cities,...suggCities])].map(c=><option key={c} value={c}/>)}</datalist>{suggErrors.city&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.city}</div>}</div>
-          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Art der Küche <span style={{fontWeight:400,color:suggForm.cuisines.length===3?"#e05030":t.tick}}>({suggForm.cuisines.length}/3)</span></label><TypeChips value={suggForm.cuisines} onChange={v=>{sf("cuisines",v);setSuggErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{suggErrors.cuisines&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.cuisines}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Trattoria da Marco" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Stadt</label><input value={suggForm.city} onChange={e=>{sf("city",e.target.value);setSuggErrors(p=>({...p,city:""}))}} placeholder="z.B. München" list="rs-cities" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.city?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="rs-cities">{[...new Set([...cities,...suggCities])].map(c=><option key={c} value={c}/>)}</datalist>{suggErrors.city&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.city}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Art der Küche <span style={{fontWeight:400,color:suggForm.cuisines.length===3?t.danger:t.tick}}>({suggForm.cuisines.length}/3)</span></label><TypeChips value={suggForm.cuisines} onChange={v=>{sf("cuisines",v);setSuggErrors(p=>({...p,cuisines:""}));}} options={CUISINES} chipOn={t.restChipOn} chipOnColor={t.restChipOnColor} t={t}/>{suggErrors.cuisines&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.cuisines}</div>}</div>
           <button onClick={handleAddSugg} disabled={saving} style={btn}>{saving?"Speichert…":"Vorschlag speichern"}</button>
         </div>
       )}
       {view==="rate"&&ratingTarget&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
           <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>{ratingTarget.name} · {ratingTarget.city}</div>
           <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
             <Slider label="🍽️ Essen" value={ratingForm.food} min={0} max={10} onChange={v=>rf("food",v)} color="#2e7d52" t={t}/>
             <Slider label="🤝 Service" value={ratingForm.service} min={0} max={10} onChange={v=>rf("service",v)} color="#1a5f8c" t={t}/>
-            <Slider label="💶 Preis" value={ratingForm.price} min={1} max={5} onChange={v=>rf("price",v)} color={t.restAccent} display={`${"€".repeat(ratingForm.price)} ${PRICE_LABELS[ratingForm.price]}`} t={t}/>
+            <Slider label="💶 Preis" value={ratingForm.price} min={1} max={5} onChange={v=>rf("price",v)} color={t.restAccent} display={"€".repeat(ratingForm.price)+" "+PRICE_LABELS[ratingForm.price]} t={t}/>
             <Slider label="⭐ Sterne" value={ratingForm.stars} min={0} max={10} onChange={v=>rf("stars",v)} color="#e8a020" t={t}/>
-            <div>
-              <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
-              <textarea value={ratingForm.kommentar||""} onChange={e=>rf("kommentar",e.target.value)}
-                placeholder="Notizen, Empfehlungen, besondere Gerichte…"
-                style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
-            </div>
+            <div><div style={{fontSize:13,fontFamily:"'Space Grotesk',sans-serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+              <textarea value={ratingForm.kommentar||""} onChange={e=>rf("kommentar",e.target.value)} placeholder="Notizen, Empfehlungen, besondere Gerichte…" style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/></div>
           </div>
           <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
         </div>
       )}
-
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
-        {[["list",navActive,()=>navTo("list"),"📋","Restaurant\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Restaurant\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
+        {[["list",navActive,()=>navTo("list"),"🍽️","Restaurant\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Restaurant\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
           <button key={key} onClick={onClick} style={{flex:1,padding:"11px 4px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
             <span style={{fontSize:20}}>{icon}</span>
             <span style={{fontSize:9,color:active?navColor:t.navInactive,fontWeight:active?700:400,textAlign:"center",lineHeight:1.25,whiteSpace:"pre-line"}}>{label}</span>
@@ -606,10 +946,7 @@ function RestaurantApp({user,dark,setDark,mode,setMode,t}){
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // WHISKY FÜHRER
-// ═══════════════════════════════════════════════════════════════════════════
-
 function WhiskyCard({w,onClick,t}){
   const avg=getAvgWhisky(w);
   const types=Array.isArray(w.types)?w.types:[];
@@ -619,32 +956,30 @@ function WhiskyCard({w,onClick,t}){
       onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{flex:1,minWidth:0,paddingRight:8}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{w.name}</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title,letterSpacing:"-0.01em"}}>{w.name}</div>
           <div style={{fontSize:12,color:t.sub,marginTop:2}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
         </div>
         <div style={{textAlign:"right",flexShrink:0}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.whiskyAccent}}>{avg.stars}</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.whiskyAccent}}>{avg.stars}</div>
           <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
         </div>
       </div>
       <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
       <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <Badge value={avg.rauchigkeit} color="#505868"/><span style={{fontSize:11,color:t.sub}}>Rauchigkeit</span>
+        <Badge value={avg.rauchigkeit} color="#505868"/><span style={{fontSize:11,color:t.sub}}>💨 Rauchigkeit</span>
         <Badge value={avg.fruchtigkeit} color="#c0306a"/><span style={{fontSize:11,color:t.sub}}>🍒 Fruchtigkeit</span>
       </div>
       {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
     </div>
   );
 }
-
 function WhiskySuggCard({s,onClick,t}){
   const types=Array.isArray(s.types)?s.types:[];
   return(
-    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12,transition:"transform 0.15s"}}
-      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{flex:1}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
           <div style={{fontSize:12,color:t.sub,marginTop:2}}>🥃 {s.distillery}{types.length?" · "+types.join(" & "):""}</div>
         </div>
         <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:t.whiskySuggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
@@ -653,7 +988,6 @@ function WhiskySuggCard({s,onClick,t}){
     </div>
   );
 }
-
 function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
   if(!w)return null;
   const avg=getAvgWhisky(w);
@@ -662,95 +996,83 @@ function WhiskyModal({w,user,onClose,onDelete,onEdit,onRate,t}){
   const isAuthor=user===w.author;const hasRated=!!w.ratings?.[user];
   return(
     <SwipeableSheet onClose={onClose} t={t}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{w.name}</div>
-        <div style={{color:t.sub,fontSize:13,marginTop:4}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
-        <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
-        <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-          <div style={{fontSize:11,color:t.sub}}>⭐ Gesamtgeschmack</div>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:30,fontWeight:700,color:t.whiskyAccent}}>{avg.stars}/10</div>
-          <div style={{fontSize:10,color:t.tick}}>Durchschnitt aus {avg.count} Wertung{avg.count!==1?"en":""}</div>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title,letterSpacing:"-0.01em"}}>{w.name}</div>
+      <div style={{color:t.sub,fontSize:13,marginTop:4}}>🥃 {w.distillery}{types.length?" · "+types.join(" & "):""}</div>
+      <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+        <div style={{fontSize:11,color:t.sub}}>⭐ Gesamtgeschmack</div>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:30,fontWeight:700,color:t.whiskyAccent}}>{avg.stars}/10</div>
+        <div style={{fontSize:10,color:t.tick}}>Durchschnitt aus {avg.count} Wertung{avg.count!==1?"en":""}</div>
+      </div>
+      <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:t.sub}}>💨 Rauchigkeit</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:26,fontWeight:700,color:"#505868"}}>{avg.rauchigkeit}/10</div>
         </div>
-        <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-            <div style={{fontSize:11,color:t.sub}}>💨 Rauchigkeit</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#505868"}}>{avg.rauchigkeit}/10</div>
+        <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:t.sub}}>🍒 Fruchtigkeit</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:26,fontWeight:700,color:"#c0306a"}}>{avg.fruchtigkeit}/10</div>
+        </div>
+      </div>
+      <div style={{marginTop:20}}>
+        <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
+        {ratings.map(([author,rating])=>(
+          <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.whiskyAccent}}>★ {rating.stars}/10</span></div>
+            <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}><span>💨 {rating.rauchigkeit}/10</span><span>🍒 {rating.fruchtigkeit}/10</span></div>
+            {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
           </div>
-          <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
-            <div style={{fontSize:11,color:t.sub}}>🍒 Fruchtigkeit</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#c0306a"}}>{avg.fruchtigkeit}/10</div>
-          </div>
-        </div>
-        <div style={{marginTop:20}}>
-          <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
-          {ratings.map(([author,rating])=>(
-            <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:t.whiskyAccent}}>★ {rating.stars}/10</span></div>
-              <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}>
-                <span>💨 {rating.rauchigkeit}/10</span><span>🍒 {rating.fruchtigkeit}/10</span>
-              </div>
-              {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
-            </div>
-          ))}
-        </div>
-        {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <button onClick={()=>onEdit(w)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
-          <button onClick={()=>onDelete(w.id)} style={{padding:"12px",borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
-        </div>}
-        {!isAuthor&&!hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>🥃 Eigene Wertung abgeben</button>}
-        {!isAuthor&&hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>✏️ Meine Wertung bearbeiten</button>}
+        ))}
+      </div>
+      {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <button onClick={()=>onEdit(w)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
+        <button onClick={()=>onDelete(w.id)} style={{padding:"12px",borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
+      </div>}
+      {!isAuthor&&!hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>🥃 Eigene Wertung abgeben</button>}
+      {!isAuthor&&hasRated&&<button onClick={()=>onRate(w)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>✏️ Meine Wertung bearbeiten</button>}
     </SwipeableSheet>
   );
 }
-
 function WhiskySuggModal({s,user,onClose,onDelete,onConvert,t}){
   if(!s)return null;
   const types=Array.isArray(s.types)?s.types:[];
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:t.modal,borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",width:"100%",maxWidth:440}}>
-        <div style={{width:40,height:4,background:t.handle,borderRadius:2,margin:"0 auto 20px"}}/>
-        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
-          <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.whiskySuggAccent,fontWeight:600}}>💡 Vorschlag</span>
-        </div>
-        <div style={{color:t.sub,fontSize:13}}>🥃 {s.distillery}{types.length?" · "+types.join(" & "):""}</div>
-        <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
-          <div style={{fontSize:13,color:t.sub}}>Noch nicht probiert.</div>
-          <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
-        </div>
-        <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Playfair Display',serif"}}>🥃 Jetzt bewerten & übernehmen</button>
-        {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#e0503015",color:"#e05030",border:"1px solid #e0503040",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
+        <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:t.whiskySuggAccent,fontWeight:600}}>💡 Vorschlag</span>
       </div>
-    </div>
+      <div style={{color:t.sub,fontSize:13}}>🥃 {s.distillery}{types.length?" · "+types.join(" & "):""}</div>
+      <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
+        <div style={{fontSize:13,color:t.sub}}>Noch nicht probiert.</div>
+        <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
+      </div>
+      <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:t.whiskyBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>🥃 Jetzt bewerten & übernehmen</button>
+      {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+    </SwipeableSheet>
   );
 }
-
 function WhiskyRatingFields({form,setF,t}){
   return(
     <>
       <Slider label="⭐ Gesamtgeschmack" value={form.stars} min={0} max={10} onChange={v=>setF("stars",v)} color={t.whiskyAccent} t={t}/>
       <Slider label="💨 Rauchigkeit" value={form.rauchigkeit} min={0} max={10} onChange={v=>setF("rauchigkeit",v)} color="#505868" t={t}/>
       <Slider label="🍒 Fruchtigkeit" value={form.fruchtigkeit} min={0} max={10} onChange={v=>setF("fruchtigkeit",v)} color="#c0306a" t={t}/>
-      <div>
-        <div style={{fontSize:13,fontFamily:"'Playfair Display',serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
-        <textarea value={form.kommentar} onChange={e=>setF("kommentar",e.target.value)}
-          placeholder="Geschmacksnotizen, Aromen, erster Eindruck…"
-          style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/>
-      </div>
+      <div><div style={{fontSize:13,fontFamily:"'Space Grotesk',sans-serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+        <textarea value={form.kommentar||""} onChange={e=>setF("kommentar",e.target.value)} placeholder="Geschmacksnotizen, Aromen, erster Eindruck…" style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/></div>
     </>
   );
 }
-
-function WhiskyApp({user,dark,setDark,mode,setMode,t}){
+function WhiskyApp({user,dark,setDark,mode,setMode,modes,t,group,members,onBack,isAdmin,onSettings}){
   const [view,setView]=useState("list");
   const [activeSection,setSection]=useState("list");
   const [whiskies,setWhiskies]=useState([]);
   const [suggestions,setSuggestions]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState(EMPTY_WHISKY);
-  const [ratingForm,setRatingForm]=useState(EMPTY_W_RATING);
+  const [form,setForm]=useState({...EMPTY_WHISKY});
+  const [ratingForm,setRatingForm]=useState({...EMPTY_W_RATING});
   const [ratingTarget,setRatingTarget]=useState(null);
-  const [suggForm,setSuggForm]=useState(EMPTY_W_SUGG);
+  const [suggForm,setSuggForm]=useState({...EMPTY_W_SUGG});
   const [suggToConvert,setSuggToConvert]=useState(null);
   const [wFilter,setWFilter]=useState({search:"",k1:"",k2:"",author:""});
   const [sFilter,setSFilter]=useState({search:"",k1:"",k2:""});
@@ -762,7 +1084,6 @@ function WhiskyApp({user,dark,setDark,mode,setMode,t}){
   const [saving,setSaving]=useState(false);
   const [toast,setToast]=useState("");
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
-
   useEffect(()=>{
     let ref;try{ref=db.ref("whiskies");ref.on("value",snap=>{const d=snap.val();setWhiskies(d?Object.values(d):[]);setLoading(false);},()=>setLoading(false));}catch{setLoading(false);}
     const tm=setTimeout(()=>setLoading(false),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
@@ -771,74 +1092,68 @@ function WhiskyApp({user,dark,setDark,mode,setMode,t}){
     let ref;try{ref=db.ref("whisky_suggestions");ref.on("value",snap=>{const d=snap.val();setSuggestions(d?Object.values(d):[]);});}catch{}
     return()=>ref&&ref.off();
   },[]);
-
-  const distilleries=[...new Set(whiskies.map(w=>w.distillery).filter(Boolean))].sort();
-  const allTypes=[...new Set(whiskies.flatMap(w=>Array.isArray(w.types)?w.types:[]))].sort();
-  const allRaters=[...new Set(whiskies.flatMap(w=>Object.keys(w.ratings||{})))].sort();
-  const filteredW=whiskies.filter(w=>{
-    return(!wFilter.k1||w.distillery===wFilter.k1)&&(!wFilter.k2||(Array.isArray(w.types)&&w.types.includes(wFilter.k2)))&&(!wFilter.author||Object.keys(w.ratings||{}).includes(wFilter.author))&&(!wFilter.search||w.name.toLowerCase().includes(wFilter.search.toLowerCase()));
-  }).sort((a,b)=>getAvgWhisky(b).stars-getAvgWhisky(a).stars);
-  const suggDist=[...new Set(suggestions.map(s=>s.distillery).filter(Boolean))].sort();
-  const suggTypes=[...new Set(suggestions.flatMap(s=>Array.isArray(s.types)?s.types:[]))].sort();
-  const filteredS=suggestions.filter(s=>(!sFilter.k1||s.distillery===sFilter.k1)&&(!sFilter.k2||(Array.isArray(s.types)&&s.types.includes(sFilter.k2)))&&(!sFilter.search||s.name.toLowerCase().includes(sFilter.search.toLowerCase())));
-
+  const visible=whiskies.map(w=>restrictToMembers(w,members)).filter(w=>Object.keys(w.ratings).length>0||members.includes(w.author));
+  const visibleSugg=suggestions.filter(s=>members.includes(s.author));
+  const distilleries=[...new Set(visible.map(w=>(w.distillery||"").trim()).filter(Boolean))].sort();
+  const allTypes=[...new Set(visible.flatMap(w=>Array.isArray(w.types)?w.types:[]))].sort();
+  const allRaters=[...new Set(visible.flatMap(w=>Object.keys(w.ratings||{})))].sort();
+  const filteredW=visible.filter(w=>(!wFilter.k1||w.distillery===wFilter.k1)&&(!wFilter.k2||(Array.isArray(w.types)&&w.types.includes(wFilter.k2)))&&(!wFilter.author||Object.keys(w.ratings||{}).includes(wFilter.author))&&(!wFilter.search||w.name.toLowerCase().includes(wFilter.search.toLowerCase()))).sort((a,b)=>getAvgWhisky(b).stars-getAvgWhisky(a).stars);
+  const suggDist=[...new Set(visibleSugg.map(s=>(s.distillery||"").trim()).filter(Boolean))].sort();
+  const suggTypes=[...new Set(visibleSugg.flatMap(s=>Array.isArray(s.types)?s.types:[]))].sort();
+  const filteredS=visibleSugg.filter(s=>(!sFilter.k1||s.distillery===sFilter.k1)&&(!sFilter.k2||(Array.isArray(s.types)&&s.types.includes(sFilter.k2)))&&(!sFilter.search||s.name.toLowerCase().includes(sFilter.search.toLowerCase())));
   const valW=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(!form.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!form.types.length)e.types="Bitte Typ auswählen";return e;};
   const valS=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(!suggForm.distillery.trim())e.distillery="Bitte Destillerie eingeben";if(!suggForm.types.length)e.types="Bitte Typ auswählen";return e;};
-
-  const handleAdd=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whiskies/"+id).set({id,name:form.name,distillery:form.distillery,types:form.types,author:user,ratings:{[user]:{stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("whisky_suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm(EMPTY_WHISKY);setErrors({});setView("list");setSection("list");showToast("✅ Whisky gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAdd=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whiskies/"+id).set({id,name:form.name,distillery:form.distillery.trim(),types:form.types,author:user,ratings:{[user]:{stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar}}});if(suggToConvert){await db.ref("whisky_suggestions/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm({...EMPTY_WHISKY});setErrors({});setView("list");setSection("list");showToast("✅ Whisky gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleEdit=w=>{const my=w.ratings?.[user]||EMPTY_W_RATING;setForm({name:w.name,distillery:w.distillery,types:Array.isArray(w.types)?w.types:[],stars:my.stars,rauchigkeit:my.rauchigkeit,fruchtigkeit:my.fruchtigkeit,kommentar:my.kommentar||""});setEditingId(w.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
-  const handleUpdate=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("whiskies/"+editingId).update({name:form.name,distillery:form.distillery,types:form.types});await db.ref(`whiskies/${editingId}/ratings/${user}`).set({stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar});setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleUpdate=async()=>{const e=valW();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref("whiskies/"+editingId).update({name:form.name,distillery:form.distillery.trim(),types:form.types});await db.ref("whiskies/"+editingId+"/ratings/"+user).set({stars:form.stars,rauchigkeit:form.rauchigkeit,fruchtigkeit:form.fruchtigkeit,kommentar:form.kommentar});setForm({...EMPTY_WHISKY});setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDelete=async id=>{try{await db.ref("whiskies/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
-  const startRate=w=>{setRatingForm(w.ratings?.[user]||EMPTY_W_RATING);setRatingTarget(w);setSelected(null);setView("rate");};
-  const handleSaveRating=async()=>{setSaving(true);try{await db.ref(`whiskies/${ratingTarget.id}/ratings/${user}`).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
-  const handleAddSugg=async()=>{const e=valS();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whisky_suggestions/"+id).set({id,name:suggForm.name,distillery:suggForm.distillery,types:suggForm.types,author:user});setSuggForm(EMPTY_W_SUGG);setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const startRate=w=>{setRatingForm(w.ratings?.[user]||{...EMPTY_W_RATING});setRatingTarget(w);setSelected(null);setView("rate");};
+  const handleSaveRating=async()=>{setSaving(true);try{await db.ref("whiskies/"+ratingTarget.id+"/ratings/"+user).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAddSugg=async()=>{const e=valS();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref("whisky_suggestions/"+id).set({id,name:suggForm.name,distillery:suggForm.distillery.trim(),types:suggForm.types,author:user});setSuggForm({...EMPTY_W_SUGG});setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
   const handleDeleteSugg=async id=>{try{await db.ref("whisky_suggestions/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
   const handleConvertSugg=s=>{setForm({name:s.name,distillery:s.distillery,types:Array.isArray(s.types)?s.types:[],stars:7,rauchigkeit:5,fruchtigkeit:5,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
   const f=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
   const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
   const navTo=s=>{setSection(s);setView(s);setSelected(null);setSuggSelected(null);};
-  const navAdd=()=>{if(activeSection==="list"){setForm(EMPTY_WHISKY);setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm(EMPTY_W_SUGG);setSuggErrors({});setView("add-suggestion");}};
+  const navAdd=()=>{if(activeSection==="list"){setForm({...EMPTY_WHISKY});setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm({...EMPTY_W_SUGG});setSuggErrors({});setView("add-suggestion");}};
   const navActive=view==="list"||view==="rate";
   const suggActive=view==="suggestions";
   const addActive=view==="add"||view==="add-suggestion";
   const navColor=t.whiskyNavActive;
-  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.whiskyBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Playfair Display',serif",opacity:saving?0.7:1};
-
-  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Playfair Display',serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
-
+  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":t.whiskyBtn,color:t.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Space Grotesk',sans-serif",opacity:saving?0.7:1};
+  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Space Grotesk',sans-serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
   return(
     <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:92,transition:"background 0.3s"}}>
-      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}
-        title="🥃 Whisky Führer der Montagabendgesellschaft"
-        subtitle={`${whiskies.length} bewertet · ${suggestions.length} Vorschlag${suggestions.length!==1?"e":""}`}
-        headerBg={t.whiskyHeaderBg} headerSub={t.whiskyHeaderSub}/>
-
+      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} modes={modes} t={t}
+        title={"🥃 Whiskys · "+group.name}
+        subtitle={visible.length+" bewertet · "+visibleSugg.length+" Vorschlag"+(visibleSugg.length!==1?"e":"")}
+        headerBg={t.whiskyHeaderBg} headerSub={t.whiskyHeaderSub} onBack={onBack} isAdmin={isAdmin} onSettings={onSettings}/>
       {view==="list"&&(
         <div style={{padding:"20px 16px"}}>
           <FilterBar filter={wFilter} setFilter={setWFilter} col1={distilleries} col2={allTypes} col1Label="Alle Destillerien" col2Label="Alle Typen" extra={[["author","Alle Bewerter",allRaters]]} filterOn={t.whiskyFilterOn} filterOnColor={t.whiskyFilterOnColor} t={t}/>
-          {filteredW.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{whiskies.length===0?"Noch keine Whiskys":"Keine Treffer"}</div></div>):filteredW.map(w=><WhiskyCard key={w.id} w={w} onClick={()=>setSelected(w)} t={t}/>)}
+          {filteredW.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>🥃</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visible.length===0?"Noch keine Whiskys":"Keine Treffer"}</div></div>):filteredW.map(w=><WhiskyCard key={w.id} w={w} onClick={()=>setSelected(w)} t={t}/>)}
         </div>
       )}
       {view==="suggestions"&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Whisky Vorschläge</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 Whisky Vorschläge</div>
           <div style={{fontSize:13,color:t.sub,marginBottom:16}}>Whiskys die ihr noch probieren möchtet</div>
           <FilterBar filter={sFilter} setFilter={setSFilter} col1={suggDist} col2={suggTypes} col1Label="Alle Destillerien" col2Label="Alle Typen" filterOn={t.whiskyFilterOn} filterOnColor={t.whiskyFilterOnColor} t={t}/>
-          {filteredS.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,marginTop:12,color:t.title}}>{suggestions.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredS.map(s=><WhiskySuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
+          {filteredS.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visibleSugg.length===0?"Noch keine Vorschläge":"Keine Treffer"}</div></div>):filteredS.map(s=><WhiskySuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t}/>)}
         </div>
       )}
       {view==="add"&&(
         <div style={{padding:"20px 16px"}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
-            <button onClick={()=>{setView(editingId?"list":activeSection);setForm(EMPTY_WHISKY);setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
-            <div><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Whisky hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.whiskySuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
+            <button onClick={()=>{setView(editingId?"list":activeSection);setForm({...EMPTY_WHISKY});setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
+            <div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":"Whisky hinzufügen"}</div>{suggToConvert&&<div style={{fontSize:12,color:t.whiskySuggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
           </div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Whisky Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Destillerie / Herkunft</label><input value={form.distillery} onChange={e=>{f("distillery",e.target.value);setErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="w-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.distillery?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="w-dist">{distilleries.map(d=><option key={d} value={d}/>)}</datalist>{errors.distillery&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.distillery}</div>}</div>
-          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Whisky Typ <span style={{fontWeight:400,color:form.types.length===3?"#e05030":t.tick}}>({form.types.length}/3)</span></label><TypeChips value={form.types} onChange={v=>{f("types",v);setErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{errors.types&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{errors.types}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Whisky Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Destillerie / Herkunft</label><input value={form.distillery} onChange={e=>{f("distillery",e.target.value);setErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="w-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.distillery?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="w-dist">{distilleries.map(d=><option key={d} value={d}/>)}</datalist>{errors.distillery&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.distillery}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Whisky Typ <span style={{fontWeight:400,color:form.types.length===3?t.danger:t.tick}}>({form.types.length}/3)</span></label><TypeChips value={form.types} onChange={v=>{f("types",v);setErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{errors.types&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.types}</div>}</div>
           <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-            <div style={{fontSize:12,color:t.label,fontFamily:"'Playfair Display',serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
+            <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
             <WhiskyRatingFields form={form} setF={f} t={t}/>
           </div>
           <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Whisky speichern"}</button>
@@ -846,27 +1161,24 @@ function WhiskyApp({user,dark,setDark,mode,setMode,t}){
       )}
       {view==="add-suggestion"&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm(EMPTY_W_SUGG);setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:t.title}}>Whisky Vorschlag</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm({...EMPTY_W_SUGG});setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>Whisky Vorschlag</div></div>
           <div style={{background:t.suggBadgeBg,borderRadius:12,padding:"10px 14px",marginBottom:20,border:`1px solid ${t.suggBorder}`}}><div style={{fontSize:12,color:t.whiskySuggAccent}}>💡 Noch nicht probiert — als Idee für den nächsten Abend.</div></div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Whisky Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
-          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Playfair Display',serif"}}>Destillerie / Herkunft</label><input value={suggForm.distillery} onChange={e=>{sf("distillery",e.target.value);setSuggErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="ws-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.distillery?"#e05030":t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="ws-dist">{[...new Set([...distilleries,...suggDist])].map(d=><option key={d} value={d}/>)}</datalist>{suggErrors.distillery&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.distillery}</div>}</div>
-          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Playfair Display',serif"}}>Whisky Typ <span style={{fontWeight:400,color:suggForm.types.length===3?"#e05030":t.tick}}>({suggForm.types.length}/3)</span></label><TypeChips value={suggForm.types} onChange={v=>{sf("types",v);setSuggErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{suggErrors.types&&<div style={{color:"#e05030",fontSize:11,marginTop:4}}>{suggErrors.types}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Whisky Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder="z.B. Laphroaig 10 Jahre" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Destillerie / Herkunft</label><input value={suggForm.distillery} onChange={e=>{sf("distillery",e.target.value);setSuggErrors(p=>({...p,distillery:""}))}} placeholder="z.B. Laphroaig, Islay" list="ws-dist" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.distillery?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="ws-dist">{[...new Set([...distilleries,...suggDist])].map(d=><option key={d} value={d}/>)}</datalist>{suggErrors.distillery&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.distillery}</div>}</div>
+          <div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Whisky Typ <span style={{fontWeight:400,color:suggForm.types.length===3?t.danger:t.tick}}>({suggForm.types.length}/3)</span></label><TypeChips value={suggForm.types} onChange={v=>{sf("types",v);setSuggErrors(p=>({...p,types:""}));}} options={WHISKY_TYPES} chipOn={t.whiskyChipOn} chipOnColor={t.whiskyChipOnColor} t={t}/>{suggErrors.types&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.types}</div>}</div>
           <button onClick={handleAddSugg} disabled={saving} style={btn}>{saving?"Speichert…":"Vorschlag speichern"}</button>
         </div>
       )}
       {view==="rate"&&ratingTarget&&(
         <div style={{padding:"20px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
           <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>{ratingTarget.name} · {ratingTarget.distillery}</div>
-          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
-            <WhiskyRatingFields form={ratingForm} setF={rf} t={t}/>
-          </div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}><WhiskyRatingFields form={ratingForm} setF={rf} t={t}/></div>
           <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
         </div>
       )}
-
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
-        {[["list",navActive,()=>navTo("list"),"📋","Whisky\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Whisky\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
+        {[["list",navActive,()=>navTo("list"),"🥃","Whisky\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡","Whisky\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
           <button key={key} onClick={onClick} style={{flex:1,padding:"11px 4px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
             <span style={{fontSize:20}}>{icon}</span>
             <span style={{fontSize:9,color:active?navColor:t.navInactive,fontWeight:active?700:400,textAlign:"center",lineHeight:1.25,whiteSpace:"pre-line"}}>{label}</span>
@@ -881,18 +1193,487 @@ function WhiskyApp({user,dark,setDark,mode,setMode,t}){
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TOP-LEVEL APP
-// ═══════════════════════════════════════════════════════════════════════════
+// MEDIA (FILME / SERIEN / EIGENE KATEGORIEN)
+function MediaCard({item,onClick,t,mc,config}){
+  const avg=getAvgMedia(item);
+  const genres=Array.isArray(item.genres)?item.genres:[];
+  const raters=Object.keys(item.ratings||{});
+  return(
+    <div onClick={onClick} style={{background:t.card,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.cardBorder}`,marginBottom:12,transition:"transform 0.15s"}}
+      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1,minWidth:0,paddingRight:8}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title,letterSpacing:"-0.01em"}}>{item.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>{item[config.field1Key]||item.field1||""}{genres.length?" · "+genres.join(" & "):""}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:mc.accent}}>{avg.stars}</div>
+          <div style={{fontSize:10,color:t.tick}}>Ø · {avg.count} Wertung{avg.count!==1?"en":""}</div>
+        </div>
+      </div>
+      <div style={{marginTop:10}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <Badge value={avg.handlung} color="#2e7d52"/><span style={{fontSize:11,color:t.sub}}>{config.crit1Short}</span>
+        <Badge value={avg.spannung} color="#7b3f9e"/><span style={{fontSize:11,color:t.sub}}>{config.crit2Short}</span>
+      </div>
+      {raters.length>0&&<div style={{textAlign:"right",marginTop:6}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>bewertet von {raters.join(", ")}</span></div>}
+    </div>
+  );
+}
+function MediaSuggCard({s,onClick,t,mc,config}){
+  const genres=Array.isArray(s.genres)?s.genres:[];
+  return(
+    <div onClick={onClick} style={{background:t.suggCard,borderRadius:16,padding:"16px 18px",boxShadow:`0 2px 12px ${t.cardShadow}`,cursor:"pointer",border:`1px solid ${t.suggBorder}`,marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,color:t.title}}>{s.name}</div>
+          <div style={{fontSize:12,color:t.sub,marginTop:2}}>{s[config.field1Key]||s.field1||""}{genres.length?" · "+genres.join(" & "):""}</div>
+        </div>
+        <span style={{background:t.suggBadgeBg,borderRadius:10,padding:"4px 10px",fontSize:11,color:mc.suggAccent,fontWeight:600,flexShrink:0,marginLeft:8}}>💡 Vorschlag</span>
+      </div>
+      <div style={{textAlign:"right",marginTop:8}}><span style={{fontSize:10,color:t.tick,fontStyle:"italic"}}>vorgeschlagen von {s.author}</span></div>
+    </div>
+  );
+}
+function MediaModal({item,user,onClose,onDelete,onEdit,onRate,t,mc,config}){
+  if(!item)return null;
+  const avg=getAvgMedia(item);
+  const genres=Array.isArray(item.genres)?item.genres:[];
+  const ratings=Object.entries(item.ratings||{});
+  const isAuthor=user===item.author;const hasRated=!!item.ratings?.[user];
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title,letterSpacing:"-0.01em"}}>{item.name}</div>
+      <div style={{color:t.sub,fontSize:13,marginTop:4}}>{item[config.field1Key]||item.field1||""}{genres.length?" · "+genres.join(" & "):""}</div>
+      <div style={{marginTop:14}}><Stars value={avg.stars} t={t}/></div>
+      <div style={{marginTop:12,background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+        <div style={{fontSize:11,color:t.sub}}>⭐ Gesamtwertung</div>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:30,fontWeight:700,color:mc.accent}}>{avg.stars}/10</div>
+        <div style={{fontSize:10,color:t.tick}}>Durchschnitt aus {avg.count} Wertung{avg.count!==1?"en":""}</div>
+      </div>
+      <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:t.sub}}>{config.crit1Label}</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:26,fontWeight:700,color:"#2e7d52"}}>{avg.handlung}/10</div>
+        </div>
+        <div style={{background:t.innerCard,borderRadius:12,padding:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:t.sub}}>{config.crit2Label}</div>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:26,fontWeight:700,color:"#7b3f9e"}}>{avg.spannung}/10</div>
+        </div>
+      </div>
+      <div style={{marginTop:20}}>
+        <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:8,fontWeight:700}}>Alle Bewertungen ({avg.count})</div>
+        {ratings.map(([author,rating])=>(
+          <div key={author} style={{background:t.ratingRow,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${t.ratingBorder}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:700,fontSize:13,color:t.title}}>{author}</span><span style={{fontSize:12,color:mc.accent}}>★ {rating.stars}/10</span></div>
+            <div style={{display:"flex",gap:12,fontSize:12,color:t.sub}}><span>{config.crit1Short} {rating.handlung}/10</span><span>{config.crit2Short} {rating.spannung}/10</span></div>
+            {rating.kommentar&&<div style={{marginTop:8,fontSize:12,color:t.sub,fontStyle:"italic",background:t.innerCard,borderRadius:8,padding:"8px 10px",lineHeight:1.5}}>"{rating.kommentar}"</div>}
+          </div>
+        ))}
+      </div>
+      {isAuthor&&<div style={{marginTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <button onClick={()=>onEdit(item)} style={{padding:"12px",borderRadius:12,background:t.innerCard,color:t.title,border:`1px solid ${t.cardBorder}`,fontSize:14,cursor:"pointer",fontWeight:600}}>✏️ Bearbeiten</button>
+        <button onClick={()=>onDelete(item.id)} style={{padding:"12px",borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Löschen</button>
+      </div>}
+      {!isAuthor&&!hasRated&&<button onClick={()=>onRate(item)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:mc.btn,color:mc.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>⭐ Eigene Wertung abgeben</button>}
+      {!isAuthor&&hasRated&&<button onClick={()=>onRate(item)} style={{marginTop:16,width:"100%",padding:14,borderRadius:12,background:t.secondaryBtn,color:t.secondaryBtnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>✏️ Meine Wertung bearbeiten</button>}
+    </SwipeableSheet>
+  );
+}
+function MediaSuggModal({s,user,onClose,onDelete,onConvert,t,mc,config}){
+  if(!s)return null;
+  const genres=Array.isArray(s.genres)?s.genres:[];
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+        <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:t.title}}>{s.name}</div>
+        <span style={{background:t.suggBadgeBg,borderRadius:8,padding:"3px 8px",fontSize:11,color:mc.suggAccent,fontWeight:600}}>💡 Vorschlag</span>
+      </div>
+      <div style={{color:t.sub,fontSize:13}}>{s[config.field1Key]||s.field1||""}{genres.length?" · "+genres.join(" & "):""}</div>
+      <div style={{marginTop:16,background:t.innerCard,borderRadius:12,padding:14}}>
+        <div style={{fontSize:13,color:t.sub}}>Noch nicht gesehen.</div>
+        <div style={{fontSize:12,color:t.tick,marginTop:4,fontStyle:"italic"}}>Vorgeschlagen von {s.author}</div>
+      </div>
+      <button onClick={()=>onConvert(s)} style={{marginTop:16,width:"100%",padding:15,borderRadius:12,background:mc.btn,color:mc.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>⭐ Jetzt bewerten & übernehmen</button>
+      {user===s.author&&<button onClick={()=>onDelete(s.id)} style={{marginTop:10,width:"100%",padding:13,borderRadius:12,background:"#c0302815",color:t.danger,border:"1px solid #c0302840",fontSize:14,cursor:"pointer",fontWeight:600}}>🗑️ Vorschlag löschen</button>}
+    </SwipeableSheet>
+  );
+}
+function MediaRatingFields({form,setF,accent,config,t}){
+  return(
+    <>
+      <Slider label="⭐ Gesamtwertung" value={form.stars} min={0} max={10} onChange={v=>setF("stars",v)} color={accent} t={t}/>
+      <Slider label={config.crit1Label} value={form.handlung} min={0} max={10} onChange={v=>setF("handlung",v)} color="#2e7d52" t={t}/>
+      <Slider label={config.crit2Label} value={form.spannung} min={0} max={10} onChange={v=>setF("spannung",v)} color="#7b3f9e" t={t}/>
+      <div><div style={{fontSize:13,fontFamily:"'Space Grotesk',sans-serif",color:t.label,marginBottom:8}}>💬 Kommentar</div>
+        <textarea value={form.kommentar||""} onChange={e=>setF("kommentar",e.target.value)} placeholder="Meinung, Highlights, Empfehlung…" style={{width:"100%",minHeight:80,padding:"12px 14px",borderRadius:12,fontSize:14,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,resize:"vertical",lineHeight:1.5}}/></div>
+    </>
+  );
+}
+function MediaApp({user,dark,setDark,mode,setMode,modes,t,group,members,onBack,isAdmin,onSettings,config}){
+  const mc=dark?config.dark:config.light;
+  const [view,setView]=useState("list");
+  const [activeSection,setSection]=useState("list");
+  const [items,setItems]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState({...EMPTY_MEDIA});
+  const [ratingForm,setRatingForm]=useState({...EMPTY_MEDIA_RATING});
+  const [ratingTarget,setRatingTarget]=useState(null);
+  const [suggForm,setSuggForm]=useState({...EMPTY_MEDIA_SUGG});
+  const [suggToConvert,setSuggToConvert]=useState(null);
+  const [mFilter,setMFilter]=useState({search:"",k1:"",k2:"",author:""});
+  const [sFilter,setSFilter]=useState({search:"",k1:"",k2:""});
+  const [selected,setSelected]=useState(null);
+  const [suggSelected,setSuggSelected]=useState(null);
+  const [editingId,setEditingId]=useState(null);
+  const [errors,setErrors]=useState({});
+  const [suggErrors,setSuggErrors]=useState({});
+  const [saving,setSaving]=useState(false);
+  const [toast,setToast]=useState("");
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+  const fk=config.field1Key;
+  useEffect(()=>{
+    let ref;try{ref=db.ref(config.fbBase);ref.on("value",snap=>{const d=snap.val();setItems(d?Object.values(d):[]);setLoading(false);},()=>setLoading(false));}catch{setLoading(false);}
+    const tm=setTimeout(()=>setLoading(false),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
+  },[config.fbBase]);
+  useEffect(()=>{
+    let ref;try{ref=db.ref(config.fbSugg);ref.on("value",snap=>{const d=snap.val();setSuggestions(d?Object.values(d):[]);});}catch{}
+    return()=>ref&&ref.off();
+  },[config.fbSugg]);
+  const getField1=x=>x[fk]||x.field1||"";
+  const visible=items.map(x=>restrictToMembers(x,members)).filter(x=>Object.keys(x.ratings).length>0||members.includes(x.author));
+  const visibleSugg=suggestions.filter(s=>members.includes(s.author));
+  const field1Vals=[...new Set(visible.map(x=>getField1(x).trim()).filter(Boolean))].sort();
+  const allGenres=[...new Set(visible.flatMap(x=>Array.isArray(x.genres)?x.genres:[]))].sort();
+  const allRaters=[...new Set(visible.flatMap(x=>Object.keys(x.ratings||{})))].sort();
+  const filteredM=visible.filter(x=>(!mFilter.k1||getField1(x)===mFilter.k1)&&(!mFilter.k2||(Array.isArray(x.genres)&&x.genres.includes(mFilter.k2)))&&(!mFilter.author||Object.keys(x.ratings||{}).includes(mFilter.author))&&(!mFilter.search||x.name.toLowerCase().includes(mFilter.search.toLowerCase()))).sort((a,b)=>getAvgMedia(b).stars-getAvgMedia(a).stars);
+  const suggField1=[...new Set(visibleSugg.map(s=>getField1(s).trim()).filter(Boolean))].sort();
+  const suggGenres=[...new Set(visibleSugg.flatMap(s=>Array.isArray(s.genres)?s.genres:[]))].sort();
+  const filteredS=visibleSugg.filter(s=>(!sFilter.k1||getField1(s)===sFilter.k1)&&(!sFilter.k2||(Array.isArray(s.genres)&&s.genres.includes(sFilter.k2)))&&(!sFilter.search||s.name.toLowerCase().includes(sFilter.search.toLowerCase())));
+  const hasGenres=!!config.genreOptions;
+  const valM=()=>{const e={};if(!form.name.trim())e.name="Bitte Name eingeben";if(hasGenres&&!form.genres.length)e.genres="Bitte Genre auswählen";return e;};
+  const valS=()=>{const e={};if(!suggForm.name.trim())e.name="Bitte Name eingeben";if(hasGenres&&!suggForm.genres.length)e.genres="Bitte Genre auswählen";return e;};
+  const buildItem=base=>({id:base.id,name:form.name,[fk]:form.field1.trim(),field1:form.field1.trim(),genres:form.genres,author:user});
+  const handleAdd=async()=>{const e=valM();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref(config.fbBase+"/"+id).set({id,name:form.name,[fk]:form.field1.trim(),field1:form.field1.trim(),genres:form.genres,author:user,ratings:{[user]:{stars:form.stars,handlung:form.handlung,spannung:form.spannung,kommentar:form.kommentar}}});if(suggToConvert){await db.ref(config.fbSugg+"/"+suggToConvert.id).remove();setSuggToConvert(null);}setForm({...EMPTY_MEDIA});setErrors({});setView("list");setSection("list");showToast(config.saveToast);}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleEdit=x=>{const my=x.ratings?.[user]||EMPTY_MEDIA_RATING;setForm({name:x.name,field1:getField1(x),genres:Array.isArray(x.genres)?x.genres:[],stars:my.stars,handlung:my.handlung,spannung:my.spannung,kommentar:my.kommentar||""});setEditingId(x.id);setSelected(null);setSuggToConvert(null);setErrors({});setView("add");setSection("list");};
+  const handleUpdate=async()=>{const e=valM();if(Object.keys(e).length){setErrors(e);return;}setSaving(true);try{await db.ref(config.fbBase+"/"+editingId).update({name:form.name,[fk]:form.field1.trim(),field1:form.field1.trim(),genres:form.genres});await db.ref(config.fbBase+"/"+editingId+"/ratings/"+user).set({stars:form.stars,handlung:form.handlung,spannung:form.spannung,kommentar:form.kommentar});setForm({...EMPTY_MEDIA});setEditingId(null);setErrors({});setView("list");setSection("list");showToast("✅ Aktualisiert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDelete=async id=>{try{await db.ref(config.fbBase+"/"+id).remove();setSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const startRate=x=>{setRatingForm(x.ratings?.[user]||{...EMPTY_MEDIA_RATING});setRatingTarget(x);setSelected(null);setView("rate");};
+  const handleSaveRating=async()=>{setSaving(true);try{await db.ref(config.fbBase+"/"+ratingTarget.id+"/ratings/"+user).set(ratingForm);setView("list");setSection("list");setRatingTarget(null);showToast("✅ Wertung gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleAddSugg=async()=>{const e=valS();if(Object.keys(e).length){setSuggErrors(e);return;}setSaving(true);try{const id=Date.now().toString();await db.ref(config.fbSugg+"/"+id).set({id,name:suggForm.name,[fk]:suggForm.field1.trim(),field1:suggForm.field1.trim(),genres:suggForm.genres,author:user});setSuggForm({...EMPTY_MEDIA_SUGG});setSuggErrors({});setView("suggestions");setSection("suggestions");showToast("✅ Vorschlag gespeichert!");}catch{showToast("⚠️ Fehler");}setSaving(false);};
+  const handleDeleteSugg=async id=>{try{await db.ref(config.fbSugg+"/"+id).remove();setSuggSelected(null);showToast("🗑️ Gelöscht");}catch{showToast("⚠️ Fehler");}};
+  const handleConvertSugg=s=>{setForm({name:s.name,field1:getField1(s),genres:Array.isArray(s.genres)?s.genres:[],stars:7,handlung:5,spannung:5,kommentar:""});setSuggToConvert(s);setEditingId(null);setErrors({});setSuggSelected(null);setView("add");setSection("list");};
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const rf=(k,v)=>setRatingForm(p=>({...p,[k]:v}));
+  const sf=(k,v)=>setSuggForm(p=>({...p,[k]:v}));
+  const navTo=s=>{setSection(s);setView(s);setSelected(null);setSuggSelected(null);};
+  const navAdd=()=>{if(activeSection==="list"){setForm({...EMPTY_MEDIA});setEditingId(null);setErrors({});setSuggToConvert(null);setView("add");}else{setSuggForm({...EMPTY_MEDIA_SUGG});setSuggErrors({});setView("add-suggestion");}};
+  const navActive=view==="list"||view==="rate";
+  const suggActive=view==="suggestions";
+  const addActive=view==="add"||view==="add-suggestion";
+  const btn={width:"100%",padding:16,borderRadius:14,background:saving?"#ccc":mc.btn,color:mc.btnColor,fontSize:16,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",fontFamily:"'Space Grotesk',sans-serif",opacity:saving?0.7:1};
+  if(loading)return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>{config.icon}</div><div style={{fontFamily:"'Space Grotesk',sans-serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,maxWidth:440,margin:"0 auto",position:"relative",paddingBottom:92,transition:"background 0.3s"}}>
+      <AppHeader user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} modes={modes} t={t}
+        title={config.icon+" "+config.label.replace(" Führer","")+" · "+group.name}
+        subtitle={visible.length+" bewertet · "+visibleSugg.length+" Vorschlag"+(visibleSugg.length!==1?"e":"")}
+        headerBg={mc.headerBg} headerSub={mc.headerSub} onBack={onBack} isAdmin={isAdmin} onSettings={onSettings}/>
+      {view==="list"&&(
+        <div style={{padding:"20px 16px"}}>
+          <FilterBar filter={mFilter} setFilter={setMFilter} col1={field1Vals} col2={hasGenres?allGenres:[]} col1Label={config.field1FilterLabel} col2Label={config.typeFilterLabel} extra={[["author","Alle Bewerter",allRaters]]} filterOn={mc.filterOn} filterOnColor={mc.filterOnColor} t={t}/>
+          {filteredM.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>{config.emptyIcon}</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visible.length===0?config.emptyText:"Keine Treffer"}</div></div>):filteredM.map(x=><MediaCard key={x.id} item={x} onClick={()=>setSelected(x)} t={t} mc={mc} config={config}/>)}
+        </div>
+      )}
+      {view==="suggestions"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title,marginBottom:4}}>💡 {config.suggListTitle}</div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:16}}>{config.suggHint}</div>
+          <FilterBar filter={sFilter} setFilter={setSFilter} col1={suggField1} col2={hasGenres?suggGenres:[]} col1Label={config.field1FilterLabel} col2Label={config.typeFilterLabel} filterOn={mc.filterOn} filterOnColor={mc.filterOnColor} t={t}/>
+          {filteredS.length===0?(<div style={{textAlign:"center",padding:"60px 20px",color:t.empty}}><div style={{fontSize:48}}>💡</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,marginTop:12,color:t.title}}>{visibleSugg.length===0?config.emptySuggText:"Keine Treffer"}</div></div>):filteredS.map(s=><MediaSuggCard key={s.id} s={s} onClick={()=>setSuggSelected(s)} t={t} mc={mc} config={config}/>)}
+        </div>
+      )}
+      {view==="add"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
+            <button onClick={()=>{setView(editingId?"list":activeSection);setForm({...EMPTY_MEDIA});setEditingId(null);setSuggToConvert(null);setErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub,paddingTop:2}}>←</button>
+            <div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>{editingId?"Bearbeiten":suggToConvert?"Jetzt bewerten":config.addTitle}</div>{suggToConvert&&<div style={{fontSize:12,color:mc.suggAccent,marginTop:3}}>💡 Aus Vorschlägen übernommen</div>}</div>
+          </div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Name</label><input value={form.name} onChange={e=>{f("name",e.target.value);setErrors(p=>({...p,name:""}))}} placeholder={config.namePlaceholder} style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${errors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{errors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>{config.field1Label}</label><input value={form.field1} onChange={e=>f("field1",e.target.value)} placeholder={config.field1Placeholder} list="m-field1" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="m-field1">{field1Vals.map(d=><option key={d} value={d}/>)}</datalist></div>
+          {hasGenres&&<div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Genre <span style={{fontWeight:400,color:form.genres.length===3?t.danger:t.tick}}>({form.genres.length}/3)</span></label><TypeChips value={form.genres} onChange={v=>{f("genres",v);setErrors(p=>({...p,genres:""}));}} options={config.genreOptions} chipOn={mc.chipOn} chipOnColor={mc.chipOnColor} t={t}/>{errors.genres&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{errors.genres}</div>}</div>}
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}>
+            <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",marginBottom:16,fontWeight:700}}>Deine Bewertung</div>
+            <MediaRatingFields form={form} setF={f} accent={mc.accent} config={config} t={t}/>
+          </div>
+          <button onClick={editingId?handleUpdate:handleAdd} disabled={saving} style={btn}>{saving?"Speichert…":editingId?"Änderungen speichern":suggToConvert?"Bewertung speichern":"Speichern"}</button>
+        </div>
+      )}
+      {view==="add-suggestion"&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><button onClick={()=>{setView("suggestions");setSuggForm({...EMPTY_MEDIA_SUGG});setSuggErrors({});}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:t.title}}>{config.addSuggTitle}</div></div>
+          <div style={{background:t.suggBadgeBg,borderRadius:12,padding:"10px 14px",marginBottom:20,border:`1px solid ${t.suggBorder}`}}><div style={{fontSize:12,color:mc.suggAccent}}>{config.suggHint}</div></div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>Name</label><input value={suggForm.name} onChange={e=>{sf("name",e.target.value);setSuggErrors(p=>({...p,name:""}))}} placeholder={config.namePlaceholder} style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${suggErrors.name?t.danger:t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/>{suggErrors.name&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.name}</div>}</div>
+          <div style={{marginBottom:16}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:6,fontFamily:"'Space Grotesk',sans-serif"}}>{config.field1Label}</label><input value={suggForm.field1} onChange={e=>sf("field1",e.target.value)} placeholder={config.field1Placeholder} list="ms-field1" style={{width:"100%",padding:"12px 14px",borderRadius:12,fontSize:15,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor}}/><datalist id="ms-field1">{[...new Set([...field1Vals,...suggField1])].map(d=><option key={d} value={d}/>)}</datalist></div>
+          {hasGenres&&<div style={{marginBottom:20}}><label style={{display:"block",fontSize:12,color:t.label,marginBottom:4,fontFamily:"'Space Grotesk',sans-serif"}}>Genre <span style={{fontWeight:400,color:suggForm.genres.length===3?t.danger:t.tick}}>({suggForm.genres.length}/3)</span></label><TypeChips value={suggForm.genres} onChange={v=>{sf("genres",v);setSuggErrors(p=>({...p,genres:""}));}} options={config.genreOptions} chipOn={mc.chipOn} chipOnColor={mc.chipOnColor} t={t}/>{suggErrors.genres&&<div style={{color:t.danger,fontSize:11,marginTop:4}}>{suggErrors.genres}</div>}</div>}
+          <button onClick={handleAddSugg} disabled={saving} style={btn}>{saving?"Speichert…":"Vorschlag speichern"}</button>
+        </div>
+      )}
+      {view==="rate"&&ratingTarget&&(
+        <div style={{padding:"20px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}><button onClick={()=>{setView("list");setSection("list");setRatingTarget(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:t.sub}}>←</button><div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:18,fontWeight:700,color:t.title}}>Wertung abgeben</div></div>
+          <div style={{fontSize:13,color:t.sub,marginBottom:20,paddingLeft:36}}>{ratingTarget.name}{getField1(ratingTarget)?" · "+getField1(ratingTarget):""}</div>
+          <div style={{background:t.card,borderRadius:16,padding:20,marginBottom:16,border:`1px solid ${t.cardBorder}`}}><MediaRatingFields form={ratingForm} setF={rf} accent={mc.accent} config={config} t={t}/></div>
+          <button onClick={handleSaveRating} disabled={saving} style={btn}>{saving?"Speichert…":"Wertung speichern"}</button>
+        </div>
+      )}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:440,background:t.navBg,borderTop:`1px solid ${t.navBorder}`,display:"flex",boxShadow:`0 -4px 20px ${t.navShadow}`,transition:"background 0.3s"}}>
+        {[["list",navActive,()=>navTo("list"),config.icon,config.listLabel+"\nÜbersicht"],["sugg",suggActive,()=>navTo("suggestions"),"💡",config.listLabel+"\nVorschläge"],["add-btn",addActive,navAdd,"➕","Hinzufügen"]].map(([key,active,onClick,icon,label])=>(
+          <button key={key} onClick={onClick} style={{flex:1,padding:"11px 4px 16px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <span style={{fontSize:20}}>{icon}</span>
+            <span style={{fontSize:9,color:active?mc.navActive:t.navInactive,fontWeight:active?700:400,textAlign:"center",lineHeight:1.25,whiteSpace:"pre-line"}}>{label}</span>
+            {active&&<div style={{width:20,height:2,background:mc.navActive,borderRadius:1,marginTop:1}}/>}
+          </button>
+        ))}
+      </div>
+      <MediaModal item={selected} user={user} onClose={()=>setSelected(null)} onDelete={handleDelete} onEdit={handleEdit} onRate={startRate} t={t} mc={mc} config={config}/>
+      <MediaSuggModal s={suggSelected} user={user} onClose={()=>setSuggSelected(null)} onDelete={handleDeleteSugg} onConvert={handleConvertSugg} t={t} mc={mc} config={config}/>
+      <Toast msg={toast} color={mc.toast} textColor={mc.toastColor}/>
+    </div>
+  );
+}
 
+// SEED: Account "Andi" + Gruppen "Montagabend" und "The Tasters"
+async function seedData(){
+  try{
+    const flag=await new Promise((res,rej)=>db.ref("_seeded").once("value",res,rej));
+    if(flag.val())return;
+    // Benutzer anlegen (falls nicht vorhanden)
+    const ensureUser=async(name,pw)=>{
+      const snap=await new Promise((res,rej)=>db.ref("users/"+name).once("value",res,rej));
+      if(!snap.val()){
+        const h=await hashPw(name,pw);
+        await db.ref("users/"+name).set({pwHash:h,createdAt:Date.now(),seeded:true});
+      }
+    };
+    await ensureUser("Andi","govfUr-cuwzax-necmu8");
+    // Jupp und Kashish: Platzhalter-Konten, damit sie zu Gruppen hinzugefügt werden können.
+    // Sie können sich später mit ihrem gewünschten Passwort NICHT überschreiben — daher
+    // legen wir sie mit einem Standard-Startpasswort an, das sie kennen sollten.
+    await ensureUser("Jupp","willkommen");
+    await ensureUser("Kashish","willkommen");
+    // Gruppe Montagabend: alle vier Kategorien, Mitglieder Andi (admin) + Jupp
+    const g1=await new Promise((res,rej)=>db.ref("groups").orderByChild("name").equalTo("Montagabend").once("value",res,rej));
+    if(!g1.val()){
+      const id="seed_montagabend";
+      await db.ref("groups/"+id).set({id,name:"Montagabend",topic:"Genuss",categories:{restaurant:true,whisky:true,film:true,serie:true},members:{Andi:"admin",Jupp:"member"},createdBy:"Andi",createdAt:Date.now()});
+    }
+    // Gruppe The Tasters: nur Restaurant, Mitglieder Andi (admin) + Kashish
+    const g2=await new Promise((res,rej)=>db.ref("groups").orderByChild("name").equalTo("The Tasters").once("value",res,rej));
+    if(!g2.val()){
+      const id="seed_tasters";
+      await db.ref("groups/"+id).set({id,name:"The Tasters",topic:"Genuss",categories:{restaurant:true},members:{Andi:"admin",Kashish:"member"},createdBy:"Andi",createdAt:Date.now()});
+    }
+    await db.ref("_seeded").set(true);
+  }catch(e){console.warn("Seed übersprungen:",e);}
+}
+
+// Passwort ändern (für alle Benutzer)
+function AccountSheet({user,onClose,t}){
+  const [oldPw,setOldPw]=useState("");
+  const [newPw,setNewPw]=useState("");
+  const [newPw2,setNewPw2]=useState("");
+  const [msg,setMsg]=useState("");
+  const [busy,setBusy]=useState(false);
+  const inp={width:"100%",padding:"12px 14px",borderRadius:10,fontSize:15,border:`1.5px solid ${t.inputBorder}`,background:t.inputBg,outline:"none",color:t.inputColor,marginBottom:10};
+  const change=async()=>{
+    if(!oldPw||!newPw){setMsg("Bitte alle Felder ausfüllen.");return;}
+    if(newPw.length<6){setMsg("Neues Passwort: mindestens 6 Zeichen.");return;}
+    if(newPw!==newPw2){setMsg("Neue Passwörter stimmen nicht überein.");return;}
+    setBusy(true);setMsg("");
+    try{
+      const snap=await new Promise((res,rej)=>db.ref("users/"+user).once("value",res,rej));
+      const u=snap.val();
+      const oldH=await hashPw(user,oldPw);
+      if(!u||oldH!==u.pwHash){setMsg("Aktuelles Passwort ist falsch.");setBusy(false);return;}
+      const newH=await hashPw(user,newPw);
+      await db.ref("users/"+user+"/pwHash").set(newH);
+      await db.ref("users/"+user+"/seeded").remove().catch(()=>{});
+      setOldPw("");setNewPw("");setNewPw2("");setMsg("✅ Passwort geändert.");
+    }catch{setMsg("Fehler beim Ändern.");}
+    setBusy(false);
+  };
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:20,color:t.title,letterSpacing:"-0.01em"}}>🔑 Passwort ändern</div>
+      <div style={{fontSize:12,color:t.sub,marginTop:2,marginBottom:20}}>Angemeldet als {user}</div>
+      <input type="password" value={oldPw} onChange={e=>{setOldPw(e.target.value);setMsg("");}} placeholder="Aktuelles Passwort" style={inp}/>
+      <input type="password" value={newPw} onChange={e=>{setNewPw(e.target.value);setMsg("");}} placeholder="Neues Passwort (min. 6 Zeichen)" style={inp}/>
+      <input type="password" value={newPw2} onChange={e=>{setNewPw2(e.target.value);setMsg("");}}
+        onKeyDown={e=>e.key==="Enter"&&change()} placeholder="Neues Passwort wiederholen" style={inp}/>
+      {msg&&<div style={{fontSize:12,color:msg.startsWith("✅")?"#2e7d52":t.danger,marginBottom:10}}>{msg}</div>}
+      <button onClick={change} disabled={busy}
+        style={{width:"100%",padding:14,borderRadius:12,background:busy?"#999":t.restBtn,color:t.btnColor,fontSize:15,fontWeight:700,border:"none",cursor:busy?"wait":"pointer",fontFamily:"'Space Grotesk',sans-serif"}}>
+        {busy?"Wird geändert…":"Passwort ändern"}
+      </button>
+    </SwipeableSheet>
+  );
+}
+
+// Master-/Statistikseite (nur für Andi)
+const MASTER_USER="Andi";
+function MasterDashboard({onClose,t}){
+  const [stats,setStats]=useState(null);
+  useEffect(()=>{
+    let cancelled=false;
+    const countRatings=obj=>{
+      let entries=0,ratings=0;
+      Object.values(obj||{}).forEach(item=>{
+        entries++;
+        const r=item.ratings?Object.keys(item.ratings).length:(item.author?1:0);
+        ratings+=r;
+      });
+      return{entries,ratings};
+    };
+    const load=async()=>{
+      try{
+        const get=path=>new Promise((res,rej)=>db.ref(path).once("value",s=>res(s.val()),rej));
+        const [users,groups,restaurants,whiskies,movies,series,sugg,wSugg,mSugg,sSugg]=await Promise.all([
+          get("users"),get("groups"),get("restaurants"),get("whiskies"),get("movies"),get("series"),
+          get("suggestions"),get("whisky_suggestions"),get("movie_suggestions"),get("serie_suggestions"),
+        ]);
+        if(cancelled)return;
+        const userCount=users?Object.keys(users).length:0;
+        const groupCount=groups?Object.keys(groups).length:0;
+        const r=countRatings(restaurants),w=countRatings(whiskies),m=countRatings(movies),se=countRatings(series);
+        const cnt=o=>o?Object.keys(o).length:0;
+        setStats({
+          userCount,groupCount,
+          cats:[
+            {icon:"🍽️",label:"Restaurants",entries:r.entries,ratings:r.ratings,sugg:cnt(sugg),color:t.restAccent},
+            {icon:"🥃",label:"Whiskys",entries:w.entries,ratings:w.ratings,sugg:cnt(wSugg),color:t.whiskyAccent},
+            {icon:"🎬",label:"Filme",entries:m.entries,ratings:m.ratings,sugg:cnt(mSugg),color:"#a8364e"},
+            {icon:"📺",label:"Serien",entries:se.entries,ratings:se.ratings,sugg:cnt(sSugg),color:"#3a5a9e"},
+          ],
+          totalEntries:r.entries+w.entries+m.entries+se.entries,
+          totalRatings:r.ratings+w.ratings+m.ratings+se.ratings,
+        });
+      }catch{if(!cancelled)setStats({error:true});}
+    };
+    load();
+    return()=>{cancelled=true;};
+  },[]);
+  const Stat=({big,label,color})=>(
+    <div style={{background:t.innerCard,borderRadius:14,padding:"16px 14px",textAlign:"center",flex:1}}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:30,fontWeight:700,color:color||t.title}}>{big}</div>
+      <div style={{fontSize:11,color:t.sub,marginTop:2}}>{label}</div>
+    </div>
+  );
+  return(
+    <SwipeableSheet onClose={onClose} t={t}>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:20,color:t.title,letterSpacing:"-0.01em"}}>📊 Master-Übersicht</div>
+      <div style={{fontSize:12,color:t.sub,marginTop:2,marginBottom:20}}>Gesamtstatistik über alle Nutzer und Gruppen</div>
+      {!stats?(
+        <div style={{textAlign:"center",padding:"40px 0",color:t.sub}}><div style={{fontSize:36}}>📊</div><div style={{marginTop:8,fontSize:13}}>Lade Statistiken…</div></div>
+      ):stats.error?(
+        <div style={{textAlign:"center",padding:"40px 0",color:t.danger}}>Statistiken konnten nicht geladen werden.</div>
+      ):(
+        <>
+          <div style={{display:"flex",gap:10,marginBottom:10}}>
+            <Stat big={stats.userCount} label={"angemeldete"+String.fromCharCode(10)+"Benutzer"} color={t.restAccent}/>
+            <Stat big={stats.groupCount} label={"Gruppen"+String.fromCharCode(10)+"insgesamt"}/>
+          </div>
+          <div style={{display:"flex",gap:10,marginBottom:24}}>
+            <Stat big={stats.totalEntries} label="Einträge gesamt"/>
+            <Stat big={stats.totalRatings} label="Bewertungen gesamt"/>
+          </div>
+          <div style={{fontSize:12,color:t.label,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,marginBottom:10}}>Pro Kategorie</div>
+          {stats.cats.map(c=>(
+            <div key={c.label} style={{background:t.card,borderRadius:14,padding:"14px 16px",marginBottom:10,border:`1px solid ${t.cardBorder}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:22}}>{c.icon}</span>
+                <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:t.title,flex:1}}>{c.label}</span>
+                <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:24,color:c.color}}>{c.ratings}</span>
+              </div>
+              <div style={{display:"flex",gap:8,fontSize:12,color:t.sub}}>
+                <span style={{flex:1,background:t.innerCard,borderRadius:8,padding:"6px 10px",textAlign:"center"}}>{c.entries} Eintr.</span>
+                <span style={{flex:1,background:t.innerCard,borderRadius:8,padding:"6px 10px",textAlign:"center"}}>{c.ratings} Bewert.</span>
+                <span style={{flex:1,background:t.innerCard,borderRadius:8,padding:"6px 10px",textAlign:"center"}}>{c.sugg} Vorschl.</span>
+              </div>
+            </div>
+          ))}
+          <div style={{fontSize:11,color:t.tick,marginTop:8,textAlign:"center"}}>Bewertungen = Summe aller Einzelwertungen aller Nutzer, kategorienübergreifend gezählt.</div>
+        </>
+      )}
+    </SwipeableSheet>
+  );
+}
+
+// TOP-LEVEL APP
 function App(){
-  const [user,setUser]=useState(()=>localStorage.getItem("rmg_user")||null);
+  const [user,setUser]=useState(localStorage.getItem("rmg_user")||null);
   const [dark,setDark]=useState(false);
-  const [mode,setMode]=useState("restaurant");
+  const [groups,setGroups]=useState([]);
+  const [groupsLoaded,setGroupsLoaded]=useState(false);
+  const [activeGroupId,setActiveGroupId]=useState(null);
+  const [mode,setMode]=useState(null);
+  const [showSettings,setShowSettings]=useState(false);
+  const [seedDone,setSeedDone]=useState(false);
   const t=dark?DARK:LIGHT;
+
+  useEffect(()=>{seedData().finally(()=>setSeedDone(true));},[]);
+  useEffect(()=>{
+    let ref;try{ref=db.ref("groups");ref.on("value",snap=>{const d=snap.val();setGroups(d?Object.values(d):[]);setGroupsLoaded(true);},()=>setGroupsLoaded(true));}catch{setGroupsLoaded(true);}
+    const tm=setTimeout(()=>setGroupsLoaded(true),5000);return()=>{ref&&ref.off();clearTimeout(tm);};
+  },[]);
+
+  const activeGroup=groups.find(g=>g.id===activeGroupId)||null;
+  // Wenn Gruppe gewählt: passenden Modus setzen
+  useEffect(()=>{
+    if(activeGroup){
+      const modes=modesForGroup(activeGroup);
+      if(modes.length&&!modes.find(m=>m[0]===mode))setMode(modes[0][0]);
+    }
+  },[activeGroupId,groups]);
+
+  if(!seedDone||!groupsLoaded){
+    return(<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:48}}>🍽️</div><div style={{fontFamily:"'Space Grotesk',sans-serif",color:t.sub,fontSize:14}}>Lade…</div></div>);
+  }
   if(!user)return <LoginScreen onLogin={setUser}/>;
-  if(mode==="whisky")return <WhiskyApp user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}/>;
-  return <RestaurantApp user={user} dark={dark} setDark={setDark} mode={mode} setMode={setMode} t={t}/>;
+
+  // Keine Gruppe gewählt: Übersicht
+  if(!activeGroup){
+    return <GroupsOverview user={user} groups={groups} dark={dark} setDark={setDark} t={t}
+      onLogout={()=>{localStorage.removeItem("rmg_user");setUser(null);}}
+      onOpen={g=>{setActiveGroupId(g.id);setMode(null);}}/>;
+  }
+
+  const members=Object.keys(activeGroup.members||{});
+  const isAdmin=activeGroup.members?.[user]==="admin";
+  const modes=modesForGroup(activeGroup);
+  const onBack=()=>{setActiveGroupId(null);setMode(null);};
+  const onSettings=()=>setShowSettings(true);
+  const shared={user,dark,setDark,mode,setMode,modes,t,group:activeGroup,members,onBack,isAdmin,onSettings};
+
+  let content;
+  if(mode==="restaurant")content=<RestaurantApp {...shared}/>;
+  else if(mode==="whisky")content=<WhiskyApp {...shared}/>;
+  else if(mode==="film")content=<MediaApp {...shared} config={FILM_CONFIG}/>;
+  else if(mode==="serie")content=<MediaApp {...shared} config={SERIE_CONFIG}/>;
+  else if(mode&&mode.startsWith("c:")){
+    const cat=Object.values(activeGroup.custom||{}).find(c=>c.id===mode.slice(2));
+    content=cat?<MediaApp {...shared} config={customConfig(cat)}/>:<div style={{padding:40,textAlign:"center",color:t.sub}}>Kategorie nicht gefunden.</div>;
+  }else{
+    content=<div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center",color:t.sub}}>Lade Bereich…</div>;
+  }
+
+  return(
+    <>
+      {content}
+      {showSettings&&<GroupSettingsSheet group={activeGroup} user={user} onClose={()=>setShowSettings(false)} t={t}/>}
+    </>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
